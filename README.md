@@ -1,0 +1,119 @@
+# fambigen - the Ambigram Generator
+
+![Python](https://img.shields.io/badge/python-3.x-blue.svg)
+
+A command-line tool written in Python to procedurally generate ambigrams from character pairs isourced from any TTF or WOFF font, and compose them into words or phrases. An ambigram is a word or design that can be read from more than one viewpoint, such as when flipped upside-down (180-degree rotational symmetry).
+
+This script takes one or two input words, generates the necessary rotationally symmetric glyphs for each character pair, and composes them into a single PNG image.
+
+![Example Ambigram Output]
+*(example image placeholder)*
+
+## Features
+
+* **Multiple Generation Strategies**: Implements four distinct strategies for creating ambigram glyphs:
+    * `centroid`: A simple union based on aligning the geometric centers.
+    * `principal_axis`: A more stable alignment based on the principal axis of the character shapes.
+    * `outline`: A purely vector-based method that creates an outline/inline effect.
+    * `centerline_trace`: A complex method that generates a centerline skeleton for each character, aligns them, and applies a calligraphic stroke.
+* **Flexible Ambigram Creation**:
+    * Create palindromic ambigrams from a single word (e.g., "level").
+    * Create a simple ambigram of a non-palidromic single word that will read the same "upside-down".
+    * Create symbiotic ambigrams from two different words of the same length (e.g., "kitten" / "bundle").
+* **Command-Line Interface**: All options, including input words, font file, and strategy, can be controlled via command-line arguments for easy scripting and automation.
+* **Custom Fonts**: Supports any TrueType Font (`.ttf`), with Arial as a convenient default.
+* **Mixed-Case Support**: Correctly generates glyphs from pairs of uppercase and lowercase characters (e.g., 'M' and 'e').
+* **Dual Output**: Generates both the individual SVG vector glyphs for each pair and a final composed PNG raster image for the full word.
+
+## Requirements
+
+This project uses several Python libraries for font manipulation, vector graphics, and image processing. A `requirements.txt` file is included, and you can install all dependencies using `pip`.
+
+The main libraries are:
+* `fonttools`
+* `skia-pathops`
+* `svgwrite`
+* `numpy`
+* `Pillow`
+* `scikit-image`
+* `cairosvg`
+
+## Installation
+
+1.  Clone the repository:
+    ```bash
+    git clone https://github.com/scottvr/fambigen
+    cd fambigen
+    ```
+2.  Install the required packages using the `requirements.txt` file:
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+## Usage
+
+The script is controlled via command-line arguments.
+
+```bash
+python fambigen.py word1 [word2] [--font FONT_PATH] [--strategy STRATEGY_NAME]
+```
+
+### Arguments
+
+* `word1`: (Required) The first word, which is read from left to right.
+* `word2`: (Optional) The second word, which is read when the image is rotated 180 degrees. If omitted, the script will create a palindromic ambigram of `word1`.
+* `-f, --font`: (Optional) The full path to the `.ttf` font file you wish to use. Defaults to Arial.
+* `-s, --strategy`: (Optional) The generation strategy to use. Choices are `centroid`, `principal_axis`, `outline`, and `centerline_trace`. Defaults to `outline`.
+
+### Examples
+
+**1. Create a simple ambigram of the word "awesome":**
+```bash
+python fambigen.py awesome
+```
+* This will generate a `awesome_ambigram.png` file.
+
+**2. Create an ambigram from two different words:**
+```bash
+python fambigen.py Mary LOVE
+```
+* This will generate the required mixed-case glyphs (`ML.svg`, `ao.svg`, `rv.svg`, `yE.svg`) and compose them into a `Mary-LOVE_ambigram.png` file.
+
+**3. Use a different font and strategy:**
+```bash
+python fambigen.py ambigram --font "/path/to/your/font/coolfont.ttf" --strategy centerline_trace
+```
+
+**4. Get help and see all options:**
+```bash
+python fambigen.py --help
+```
+
+## How It Works
+
+The script operates in two main stages:
+
+1.  **Stage 1: Glyph Generation**
+    * Based on the input word(s), it first determines the unique character pairs required (e.g., for "Mary" and "LOVE", the pairs are `ML`, `ao`, `rv`, `yE`).
+    * For each pair, it calls the `generate_ambigram_svg` function using the chosen strategy (`outline` by default).
+    * This generates and saves an individual SVG file for each pair into a strategy-specific directory (e.g., `generated_glyphs_outline/ML.svg`).
+
+2.  **Stage 2: Image Composition**
+    * After the required SVGs are generated, the `create_ambigram_from_string` function is called.
+    * It reads the necessary SVG files in the correct order.
+    * It uses the `cairosvg` library to render each SVG into an in-memory PNG image.
+    * Finally, it uses the `Pillow` library to stitch these individual glyph images together side-by-side into a single composite PNG file.
+
+## Contributing
+
+Contributions are welcome! If you'd like to add a new strategy, improve an existing one, or add features, please feel free to:
+
+1.  Fork the repository.
+2.  Create a new branch for your feature (`git checkout -b feature/AmazingNewStrategy`).
+3.  Commit your changes (`git commit -m 'Add AmazingNewStrategy'`).
+4.  Push to the branch (`git push origin feature/AmazingNewStrategy`).
+5.  Open a Pull Request.
+
+## License
+
+This project is licensed under the MIT Licenset push
