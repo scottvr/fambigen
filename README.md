@@ -2,13 +2,15 @@
 
 ![Python](https://img.shields.io/badge/python-3.x-blue.svg)
 
-A command-line tool written in Python to procedurally generate ambigrams from character pairs isourced from any TTF or WOFF font, and compose them into words or phrases. An ambigram is a word or design that can be read from more than one viewpoint, such as when flipped upside-down (180-degree rotational symmetry).
+A command-line tool written in Python to procedurally generate ambigrams from character pairs sourced from any TTF or WOFF font, and compose them into words or phrases. An ambigram is a word or design that can be read from more than one viewpoint, such as when flipped upside-down (180-degree rotational symmetry).
 
-This script takes one or two input words, generates the necessary rotationally symmetric glyphs for each character pair, and composes them into a single PNG image.
+This script takes one or two input words (or phrases), generates the necessary rotationally symmetric glyphs for each character pair, and composes them into a single PNG image.
 
-The project was spawned after I found some late 90's code of mine that created ambigrams using a meticulously hand-drawn fit-to-purpose ambigram font. I've long lost the code and Wayback Machine only archived pieces of it (and it was in perl, with pre-rendered hand-made GIFs) but I wanted that functionality again so I started fambigen in python a few days ago. 
+The project was spawned after I found some late 90's code of mine that created ambigrams using a meticulously hand-drawn fit-to-purpose ambigram font. I've long lost the code and Wayback Machine only archived pieces of it (and it was in perl, with pre-rendered hand-made GIFs) but I wanted that functionality again so I started fambigen in python a few days ago and very quickly decided I did not feel like re-imagining and drawning 676 glyphs to use. I also did not want to use any of the handful of existing ambigram fonts I don't know the origin of but it seems lots of gimmick/meme sites all use the same few fonts for this purpose.
 
-I also wanted to see if I could experiment with ways to programmatically take standard fonts and make them work as ambigrams without all of the weirdness and shoehorning that comes with manually creating such a font. It's still under active development and I'm still experimenting with trying to create a set of rules (and the tech to implement them) to make any font suitable for ambigram use.
+I also wanted to see if I could experiment with ways to programmatically take standard fonts and make them work as ambigrams without all of the weirdness and shoehorning that comes with manually creating such a font. It's still under active development and I'm still experimenting with trying to create a set of rules (and the tech to implement them) to make any font suitable for ambigram use. It was shocking to me to only find two academic papers on the topic of using computers to generate ambigrams; one of them was a manual process using a vector image editing program and the other is a more recent paper on training a Diffusion model to generate ambigrams. Really? Nothing from the folks of SIGGRAPH on the topic, ever? *shrug*
+
+Maybe I'll write a paper explaining my method. :-)
 
 ## Examples
 
