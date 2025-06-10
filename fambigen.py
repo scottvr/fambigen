@@ -21,7 +21,7 @@ from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.pens.transformPen import TransformPen
 from fontPens.flattenPen import FlattenPen
 from fontTools.misc.transform import Transform
-from pathops import Path as SkiaPath, union, difference, xor
+from pathops import Path as SkiaPath, union, difference, xor, intersection
 from scipy.ndimage import rotate
 from cairosvg import svg2png
 
@@ -50,6 +50,16 @@ class SkiaPathPen(BasePen):
     def _closePath(self):
         self.path.close()
 
+def create_rect_path(bounds_tuple):
+    """Creates a rectangular SkiaPath from a (left, top, right, bottom) tuple."""
+    left, top, right, bottom = bounds_tuple
+    rect_path = SkiaPath()
+    rect_path.moveTo(left, top)
+    rect_path.lineTo(right, top)
+    rect_path.lineTo(right, bottom)
+    rect_path.lineTo(left, bottom)
+    rect_path.close()
+    return rect_path
 
 def align_using_centroid(path1_raw, path2_rotated, glyph_set, pair=""):
     """Aligns two paths by their geometric centroids and returns the union."""
@@ -347,6 +357,81 @@ def generate_using_centerline_trace(path1_raw, path2_rotated, glyph_set, pair=""
         traceback.print_exc()
         return None
 
+def generate_using_half_letters(path1_raw, path2_rotated, glyph_set, pair=""):
+    """
+    Creates an ambigram by clipping the TOP half of each character FIRST,
+    and then rotating and aligning the resulting pieces.
+    """
+    try:
+        # --- Step 1: Calculate alignment transforms from the FULL paths BEFORE clipping ---
+        bounds1 = path1_raw.bounds
+        if not bounds1: return None
+        cx1, cy1 = (bounds1[0] + bounds1[2]) / 2, (bounds1[1] + bounds1[3]) / 2
+        transform1 = Transform().translate(-cx1, -cy1)
+
+        bounds2 = path2_rotated.bounds
+        if not bounds2: return None
+        cx2, cy2 = (bounds2[0] + bounds2[2]) / 2, (bounds2[1] + bounds2[3]) / 2
+        transform2 = Transform().translate(-cx2, -cy2)
+
+        # --- Step 2: Get the top half of the original char1 ---
+        top_half_y_mid1 = (bounds1[1] + bounds1[3]) / 2
+        # CORRECTED: Clip from the midpoint to the character's bottom (higher Y-value) to get the top half.
+        clip_box1 = create_rect_path((bounds1[0] - 1, top_half_y_mid1, bounds1[2] + 1, bounds1[3] + 1))
+        top_half_pen1 = SkiaPathPen(glyph_set)
+        intersection((path1_raw,), (clip_box1,), top_half_pen1)
+        top_half1 = top_half_pen1.path
+
+        # --- Step 3: Get the top half of the original char2 ---
+        path2_raw_temp_pen = SkiaPathPen(glyph_set)
+        path2_rotated.draw(TransformPen(path2_raw_temp_pen, Transform().rotate(math.pi)))
+        path2_raw_temp = path2_raw_temp_pen.path
+        
+        bounds2_raw = path2_raw_temp.bounds
+        if not bounds2_raw: return None
+        top_half_y_mid2 = (bounds2_raw[1] + bounds2_raw[3]) / 2
+        # CORRECTED: Clip from the midpoint to the character's bottom to get the top half.
+        clip_box2 = create_rect_path((bounds2_raw[0] - 1, top_half_y_mid2, bounds2_raw[2] + 1, bounds2_raw[3] + 1))
+        top_half_pen2 = SkiaPathPen(glyph_set)
+        intersection((path2_raw_temp,), (clip_box2,), top_half_pen2)
+        top_half2 = top_half_pen2.path
+
+        # --- Step 4: Apply the pre-calculated transforms to the clipped halves ---
+        aligned_half1_pen = SkiaPathPen(glyph_set)
+        top_half1.draw(TransformPen(aligned_half1_pen, transform1))
+        aligned_half1 = aligned_half1_pen.path
+
+        rotated_half2_pen = SkiaPathPen(glyph_set)
+        top_half2.draw(TransformPen(rotated_half2_pen, Transform().rotate(math.pi)))
+        
+        aligned_half2_pen = SkiaPathPen(glyph_set)
+        rotated_half2_pen.path.draw(TransformPen(aligned_half2_pen, transform2))
+        aligned_half2 = aligned_half2_pen.path
+
+        # --- Step 5: Union the two perfectly aligned halves ---
+        merged_halves_pen = SkiaPathPen(glyph_set)
+        union((aligned_half1, aligned_half2), merged_halves_pen)
+        merged_halves_path = merged_halves_pen.path
+        if not merged_halves_path or not merged_halves_path.bounds: return None
+
+        # --- Step 6: Apply the vector outline logic ---
+        bounds = merged_halves_path.bounds
+        cx, cy = (bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2
+        scale_factor = 0.88
+        
+        scale_down_transform = Transform().translate(-cx, -cy).scale(scale_factor).translate(cx, cy)
+        scaled_down_pen = SkiaPathPen(glyph_set)
+        merged_halves_path.draw(TransformPen(scaled_down_pen, scale_down_transform))
+        
+        outline_pen = SkiaPathPen(glyph_set)
+        xor((merged_halves_path,), (scaled_down_pen.path,), outline_pen)
+        
+        if not outline_pen.path or not outline_pen.path.bounds: return None
+        return outline_pen.path
+
+    except Exception as e:
+        print(f"  -> ERROR in half_letters strategy: {e}\n{traceback.format_exc()}")
+        return None
 
 def generate_ambigram_svg(font, pair, output_dir, strategy_func):
     """Generates an ambigram SVG using a specified strategy function."""
@@ -488,7 +573,7 @@ if __name__ == "__main__":
         "-s", "--strategy",
         type=str,
         default="outline",
-        choices=['centroid', 'principal_axis', 'outline', 'centerline_trace'],
+        choices=['centroid', 'principal_axis', 'outline', 'centerline_trace', 'half_letters'],
         help="The generation strategy to use. Defaults to 'outline'."
     )
     
@@ -502,7 +587,8 @@ if __name__ == "__main__":
         'centroid': align_using_centroid,
         'principal_axis': align_using_principal_axis,
         'outline': generate_using_outline,
-        'centerline_trace': generate_using_centerline_trace
+        'centerline_trace': generate_using_centerline_trace,
+        'half_letters': generate_using_half_letters 
     }
     STRATEGY_TO_USE = strategy_map[args.strategy]
 
@@ -533,4 +619,4 @@ if __name__ == "__main__":
         generate_ambigram_svg(font, pair, ".", STRATEGY_TO_USE)
 
     output_filename = f"{INPUT_WORD}{'-' + INPUT_WORD2 if INPUT_WORD2 else ''}_{os.path.basename(FONT_FILE_PATH)}_ambigram.png"
-    create_ambigram_from_string(INPUT_WORD, strategy_name, output_filename, word2=INPUT_WORD2[::-1])  
+    create_ambigram_from_string(INPUT_WORD, strategy_name, output_filename, word2=comparison_word)  
