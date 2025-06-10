@@ -121,12 +121,12 @@ The script operates in two main stages:
 
 ## Contributing
 
-Contributions are welcome! If you'd like to add a new strategy, improve an existing one, or add features, please feel free to:
+It is a fair way from perfect so you issues, fixes, enhancements, etc are welcome! If you'd like to add a new strategy, improve an existing one, or add features, please feel free to:
 
 1.  Fork the repository.
-2.  Create a new branch for your feature (`git checkout -b feature/AmazingNewStrategy`).
-3.  Commit your changes (`git commit -m 'Add AmazingNewStrategy'`).
-4.  Push to the branch (`git push origin feature/AmazingNewStrategy`).
+2.  Create a new branch for your feature.
+3.  Commit your changes.
+4.  Push to the branch 
 5.  Open a Pull Request.
 
 ## License
