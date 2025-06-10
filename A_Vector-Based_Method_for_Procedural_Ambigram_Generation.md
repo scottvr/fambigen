@@ -1,6 +1,6 @@
 ### A Vector-Based Method for Procedural Ambigram Generation
 
-**Author:** Scott (Your Name) and Gemini
+**Author:** Scott VanRavenswaay and Gemini
 *Google*
 
 ---
