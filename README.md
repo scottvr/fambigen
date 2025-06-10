@@ -1,4 +1,4 @@
-# fambigen - the Ambigram Generator
+t# fambigen - the Ambigram Generator
 
 ![Python](https://img.shields.io/badge/python-3.x-blue.svg)
 
