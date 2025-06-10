@@ -9,9 +9,11 @@
 import svgwrite
 import math
 import os
+import io
 import numpy as np
 import traceback
 import string
+import argparse
 from PIL import Image, ImageDraw
 from skimage.morphology import skeletonize, binary_opening, binary_closing, binary_dilation
 from skimage.measure import find_contours, approximate_polygon
@@ -23,6 +25,7 @@ from fontPens.flattenPen import FlattenPen
 from fontTools.misc.transform import Transform
 from pathops import Path as SkiaPath, union, difference, xor
 from scipy.ndimage import rotate
+from cairosvg import svg2png
 
 import faulthandler
 
@@ -449,12 +452,69 @@ def generate_ambigram_svg(font, pair, output_dir, strategy_func):
     dwg.save()
     print(f"  -> Saved to {output_filename}")
 
+def create_ambigram_from_string(word1, strategy_name, output_filename, word2=None):
+    """
+    Creates a single composite ambigram image from one or two words,
+    preserving case.
+
+    Args:
+        word1 (str): The word that reads forwards.
+        strategy_name (str): The name of the generation strategy (e.g., "outline").
+        output_filename (str): The filename for the final PNG image.
+        word2 (str, optional): The word that reads upon rotation.
+                               If None, a palindromic ambigram of word1 is created.
+    """
+    # If word2 is not provided, the reversed word1 is used.
+    if not word2:
+        word2 = word1[::-1]
+    
+    print(f"\n--- Composing ambigram for '{word1}' / '{word2}' ---")
+    
+    # Define the directory where the glyphs are stored
+    glyph_dir = os.path.join(".", f"generated_glyphs_{strategy_name}")
+
+    # Determine the required SVG file for each letter position, preserving case.
+    required_files = [f"{c1}{c2}.svg" for c1, c2 in zip(word1, word2)]
+    
+    glyph_images = []
+    for filename in required_files:
+        filepath = os.path.join(glyph_dir, filename)
+        if not os.path.exists(filepath):
+            print(f"  -> Warning: Required glyph file not found, skipping: {filepath}")
+            continue
+        
+        try:
+            png_data = svg2png(url=filepath)
+            glyph_image = Image.open(io.BytesIO(png_data))
+            glyph_images.append(glyph_image)
+            print(f"  -> Loaded and rendered {filename}")
+        except Exception as e:
+            print(f"  -> ERROR: Could not process {filename}. Details: {e}")
+
+    if not glyph_images:
+        print("Could not render any glyphs. Aborting composition.")
+        return
+
+    # Calculate dimensions for the final composite image
+    total_width = sum(img.width for img in glyph_images)
+    max_height = max(img.height for img in glyph_images)
+
+    # Create a new blank canvas with a white background
+    composite_image = Image.new('RGBA', (total_width, max_height), (255, 255, 255, 255))
+    
+    current_x = 0
+    for img in glyph_images:
+        composite_image.paste(img, (current_x, 0), img)
+        current_x += img.width
+
+    composite_image.save(output_filename)
+    print(f"Ambigram saved successfully to {output_filename}")
 
 # --- Main Execution ---
 
-if __name__ == "__main__":
+if __name__ == "__oldmain__":
     faulthandler.enable() 
-    #FONT_FILE_PATH = "C:/Windows/Fonts/Arial.ttf"
+    #FONT_FILE_PATH = "C:/temp/roboto/static/Roboto-Condensed-Thin.ttf"
     FONT_FILE_PATH = "C:/Windows/Fonts/Arial.ttf"
     #PAIRS_TO_GENERATE = ['nu', 'zs', 'ab', 'hi', 'do', 'bp', 'mw', 'sx', 'bd', 'aa', 'db']
     PAIRS_TO_GENERATE = [c1 + c2 for c1 in string.ascii_lowercase for c2 in string.ascii_lowercase]
@@ -480,3 +540,84 @@ if __name__ == "__main__":
             for pair in PAIRS_TO_GENERATE:
                 print(f"\n- Generating pair: '{pair}'")
                 generate_ambigram_svg(font, pair, ".", strategy_func)
+
+if __name__ == "__main__":
+    # --- Step 1: Set up the command-line argument parser ---
+    parser = argparse.ArgumentParser(
+        description="Generate a composite ambigram from one or two words using a specified font.",
+        formatter_class=argparse.RawTextHelpFormatter # For better help text formatting
+    )
+    parser.add_argument(
+        "word1", 
+        type=str, 
+        help="The first word to create the ambigram from (reads forwards)."
+    )
+    parser.add_argument(
+        "word2", 
+        type=str, 
+        nargs='?', # Makes this argument optional
+        default=None, 
+        help="(Optional) The second word (reads when rotated 180 degrees).\nIf omitted, a palindromic ambigram of word1 will be created."
+    )
+    parser.add_argument(
+        "-f", "--font", 
+        type=str, 
+        default="C:/Windows/Fonts/Arial.ttf",
+        help="Path to the TTF font file to use.\nDefaults to Arial on Windows."
+    )
+    parser.add_argument(
+        "-s", "--strategy",
+        type=str,
+        default="outline",
+        choices=['centroid', 'principal_axis', 'outline', 'centerline_trace'],
+        help="The generation strategy to use. Defaults to 'outline'."
+    )
+    
+    args = parser.parse_args()
+
+    # --- Step 2: Assign parsed arguments to our variables ---
+    INPUT_WORD = args.word1
+    INPUT_WORD2 = args.word2
+    FONT_FILE_PATH = args.font
+    
+    strategy_map = {
+        'centroid': align_using_centroid,
+        'principal_axis': align_using_principal_axis,
+        'outline': generate_using_outline,
+        'centerline_trace': generate_using_centerline_trace
+    }
+    STRATEGY_TO_USE = strategy_map[args.strategy]
+
+    # --- The rest of the script now uses the arguments from the command line ---
+
+    # Input Validation
+    if INPUT_WORD2 and len(INPUT_WORD) != len(INPUT_WORD2):
+        print(f"ERROR: Input words '{INPUT_WORD}' and '{INPUT_WORD2}' must be the same length.")
+        exit()
+
+    if not os.path.exists(FONT_FILE_PATH):
+        print(f"ERROR: Font file not found at '{FONT_FILE_PATH}'")
+        exit()
+
+    # Stage 1: Generate necessary glyphs
+    strategy_name = STRATEGY_TO_USE.__name__.replace('generate_using_', '')
+    print(f"--- Using strategy: {strategy_name} ---")
+
+    comparison_word = INPUT_WORD2[::-1] if INPUT_WORD2 else INPUT_WORD[::-1]
+    pairs_to_generate = sorted(list(set([c1 + c2 for c1, c2 in zip(INPUT_WORD, comparison_word)])))
+    
+    print(f"Required pairs to generate: {pairs_to_generate}")
+
+    try:
+        font = TTFont(FONT_FILE_PATH)
+    except Exception as e:
+        print(f"CRITICAL ERROR: Could not load font. Aborting. Details: {e}")
+        exit()
+
+    for pair in pairs_to_generate:
+        print(f"\n- Generating glyph for pair: '{pair}'")
+        generate_ambigram_svg(font, pair, ".", STRATEGY_TO_USE)
+
+    # Stage 2: Compose the final image
+    output_filename = f"{INPUT_WORD}{'-' + INPUT_WORD2 if INPUT_WORD2 else ''}_ambigram.png"
+    create_ambigram_from_string(INPUT_WORD, strategy_name, output_filename, word2=INPUT_WORD2[::-1])
