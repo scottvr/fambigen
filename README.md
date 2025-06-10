@@ -121,7 +121,7 @@ The script operates in two main stages:
 
 ## Contributing
 
-Contributions are welcome! If you'd like to add a new strategy, improve an existing one, or add features, please feel free to:
+It is a fair way from perfect so you issues, fixes, enhancements, etc are welcome! If you'd like to add a new strategy, improve an existing one, or add features, please feel free to:
 
 1.  Fork the repository.
 2.  Create a new branch for your feature.
