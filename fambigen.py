@@ -11,6 +11,7 @@ import math
 import os
 import numpy as np
 import traceback
+import string
 from PIL import Image, ImageDraw
 from skimage.morphology import skeletonize, binary_opening, binary_closing, binary_dilation
 from skimage.measure import find_contours, approximate_polygon
@@ -227,15 +228,14 @@ def rasterize_path(draw_context, path_to_draw, line_width=2):
 def generate_using_outline(path1_raw, path2_rotated, glyph_set, pair=""):
     """
     Creates a calligraphic 'outline' style glyph using purely vector operations.
-    This avoids all rasterization and skeletonization.
+    This version removes the failing .simplify() call and returns the direct
+    result of the boolean XOR operation.
     """
     try:
         # Step 1: Get the base merged shape.
         base_merged_path = align_using_centroid(path1_raw, path2_rotated, glyph_set, pair)
         if not base_merged_path or not base_merged_path.bounds:
-            print(f"  -> DEBUG for '{pair}': Exiting because base_merged_path is empty.")
             return None
-        print(f"  -> DEBUG for '{pair}': Base merged path bounds: {base_merged_path.bounds}")
 
         # Step 2: Calculate the center of the shape for scaling.
         bounds = base_merged_path.bounds
@@ -244,24 +244,21 @@ def generate_using_outline(path1_raw, path2_rotated, glyph_set, pair=""):
 
         # Step 3: Create a scaled-down version of the path.
         scale_factor = 0.88
+        
         scale_down_transform = Transform().translate(-cx, -cy).scale(scale_factor).translate(cx, cy)
 
         scaled_down_pen = SkiaPathPen(glyph_set)
         base_merged_path.draw(TransformPen(scaled_down_pen, scale_down_transform))
         scaled_down_path = scaled_down_pen.path
-        print(f"  -> DEBUG for '{pair}': Scaled-down path bounds: {scaled_down_path.bounds}")
 
-        # Step 4: Subtract the smaller path from the larger path.
+        # Step 4: Use the explicit XOR function to create the outline.
         outline_pen = SkiaPathPen(glyph_set)
-        difference((base_merged_path,), (scaled_down_path,), outline_pen)
+        xor((base_merged_path,), (scaled_down_path,), outline_pen)
         outline_path = outline_pen.path
-        print(f"  -> DEBUG for '{pair}': Path bounds after 'difference': {outline_path.bounds}")
-
-              # Step 5: Return the path directly from the 'difference' operation.
-        # The 'simplify' step was failing, so we are removing it.
+        
+        # Step 5: Return the result directly, skipping the failing simplify() step.
         if not outline_path or not outline_path.bounds:
-             print(f"  -> DEBUG for '{pair}': Exiting because outline path from difference is empty.")
-             return None
+            return None
 
         return outline_path
 
@@ -269,6 +266,7 @@ def generate_using_outline(path1_raw, path2_rotated, glyph_set, pair=""):
         print(f"  -> ERROR in outline strategy: {e}")
         traceback.print_exc()
         return None
+        
 
 def generate_using_centerline_trace(path1_raw, path2_rotated, glyph_set, pair=""):
     """
@@ -456,8 +454,10 @@ def generate_ambigram_svg(font, pair, output_dir, strategy_func):
 
 if __name__ == "__main__":
     faulthandler.enable() 
+    #FONT_FILE_PATH = "C:/Windows/Fonts/Arial.ttf"
     FONT_FILE_PATH = "C:/Windows/Fonts/Arial.ttf"
-    PAIRS_TO_GENERATE = ['nu', 'zs', 'ab', 'hi', 'do', 'bp', 'mw', 'sx']
+    #PAIRS_TO_GENERATE = ['nu', 'zs', 'ab', 'hi', 'do', 'bp', 'mw', 'sx', 'bd', 'aa', 'db']
+    PAIRS_TO_GENERATE = [c1 + c2 for c1 in string.ascii_lowercase for c2 in string.ascii_lowercase]
     
     STRATEGY_FUNCTIONS = [
         align_using_centroid,
