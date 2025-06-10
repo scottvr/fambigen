@@ -6,7 +6,7 @@ A command-line tool written in Python to procedurally generate ambigrams from ch
 
 This script takes one or two input words, generates the necessary rotationally symmetric glyphs for each character pair, and composes them into a single PNG image.
 
-The project was spawned after I found some late 90's code of mine that creataed ambigrams using a meticulously hand-drawn fit-to-purpose ambigram font. I've long lost the code and Wayback Machine only archived pieces of it (and it was in perl, with pre-rendered hand-made GIFs) but I wanted that functionality again so I started fambigen in python a few days ago. 
+The project was spawned after I found some late 90's code of mine that created ambigrams using a meticulously hand-drawn fit-to-purpose ambigram font. I've long lost the code and Wayback Machine only archived pieces of it (and it was in perl, with pre-rendered hand-made GIFs) but I wanted that functionality again so I started fambigen in python a few days ago. 
 
 I also wanted to see if I could experiment with ways to take standard fonts and make them work as ambigrams without all of the weirdness and shoehorning that comes with manually creating such a font. It's still under active development and I'm still experimenting with trying to create a set of rules (and the tech to implement them) to make any font suitable for ambigram use.
 
