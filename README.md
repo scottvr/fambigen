@@ -20,7 +20,7 @@ I also wanted to see if I could experiment with ways to programmatically take st
 
 ![deadbeef](https://killsignal.net/deadbeef/deadbeef-deadbeef_Inkfree.ttf_ambigram.png)
 
-`ycombinator-hackernews-arial`
+`ycombinator-hackernews-ariblk`
 
 ![ycombinator-hackernews-ariblk.png](https://github.com/scottvr/fambigen/blob/91c22b352f2aad22b219de4b385bf38ed46bee0f/assets/ycombinator-hackernews!_ariblk.ttf_ambigram.png)
 
