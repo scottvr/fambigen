@@ -190,13 +190,9 @@ def align_using_iterative_registration(path1_raw, path2_rotated, pair=""):
     best_transform_for_path2 = None
     cx2, cy2 = (bounds2[0] + bounds2[2]) / 2, (bounds2[1] + bounds2[3]) / 2
 
-    # --- CORRECTED PARAMETERS ---
     # Define search parameters based on the glyph's size for robustness.
     max_dim = max(bounds1[2] - bounds1[0], bounds1[3] - bounds1[1], bounds2[2] - bounds2[0], bounds2[3] - bounds2[1])
-    # Search in a more focused radius (e.g., 30% of the max glyph dimension).
-    search_range = int(max_dim * 0.3)
-    # Use a much finer step. Aim for ~40 total steps across the range.
-    # This is the key change to ensure we don't miss the optimal alignment.
+    search_range = int(max_dim * 0.1)
     num_steps_in_radius = 20 
     step = max(2, int(search_range / num_steps_in_radius))
 
@@ -648,15 +644,16 @@ def generate_ambigram_svg(font1, font2, pair, output_dir, strategy_func, uniform
     dwg.save()
     print(f"  -> Saved to {output_filename}")
 
-def create_ambigram_from_string(word1, strategy_name, output_filename, word2=None, target_width=1200, uniform_glyphs=False):
+def create_ambigram_from_string(word1, strategy_name, output_filename, word2=None, target_width=1200, uniform_glyphs=False, alignment_func=align_using_centroid):
     """
     Creates a single composite ambigram image, scaled to a target width,
     with an option for uniform glyph rendering.
     """
     print(f"\n--- Composing ambigram for '{word1}' / '{word2 if word2 else word1}' ---")
     
+    align_name = alignment_func.__name__.replace('align_using_', '')
     strategy_name = strategy_name.replace('align_using_', '').replace('generate_using_', '')
-    glyph_dir = os.path.join(".", f"generated_glyphs_{strategy_name}")
+    glyph_dir = os.path.join(".", f"generated_glyphs_{strategy_name}_{align_name}")
     required_files = [f"{c1}{c2}.svg" for c1, c2 in zip(word1, word2)]
     glyph_images = []
 
@@ -821,4 +818,4 @@ if __name__ == "__main__":
         generate_ambigram_svg(font1, font2, pair, ".", STRATEGY_TO_USE, alignment_func=ALIGNMENT_TO_USE, uniform_glyphs=UNIFORM_GLYPHS)
 
     output_filename = f"{INPUT_WORD}{'-' + (INPUT_WORD2 if args.noambi else INPUT_WORD2[::-1] if INPUT_WORD2 else '')}_{os.path.basename(FONT1_FILE_PATH)}{'_uni' if UNIFORM_GLYPHS else ''}{'-' + os.path.basename(FONT2_FILE_PATH) if FONT2_FILE_PATH and font1 != font2 else ''}_{'no' if args.noambi else ''}ambigram.png"
-    create_ambigram_from_string(INPUT_WORD, strategy_name, output_filename, word2=INPUT_WORD2, target_width=TARGET_WIDTH, uniform_glyphs=UNIFORM_GLYPHS)
+    create_ambigram_from_string(INPUT_WORD, strategy_name, output_filename, word2=INPUT_WORD2, target_width=TARGET_WIDTH, uniform_glyphs=UNIFORM_GLYPHS, alignment_func=ALIGNMENT_TO_USE)
