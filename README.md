@@ -10,7 +10,9 @@ The project was spawned after I found some late 90's code of mine that created a
 
 I also wanted to see if I could experiment with ways to programmatically take standard fonts and make them work as ambigrams without all of the weirdness and shoehorning that comes with manually creating such a font. It's still under active development and I'm still experimenting with trying to create a set of rules (and the tech to implement them) to make any font suitable for ambigram use. It was shocking to me to only find two academic papers on the topic of using computers to generate ambigrams; one of them was a manual process using a vector image editing program and the other is a more recent paper on training a Diffusion model to generate ambigrams. Really? Nothing from the folks of SIGGRAPH on the topic, ever? *shrug*
 
-Maybe I'll write a paper explaining my method. :-)
+~~Maybe I'll write a paper explaining my method. :-)~~
+
+[I've writtten a paper about this method](https://paperclipmaximizer.ai/fambigen.pdf)
 
 ## Examples
 
