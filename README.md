@@ -31,10 +31,12 @@ I also wanted to see if I could experiment with ways to programmatically take st
 ## Features
 
 * **Multiple Generation Strategies**: Implements four distinct strategies for creating ambigram glyphs:
-    * `centroid`: A simple union based on aligning the geometric centers.
-    * `principal_axis`: A more stable alignment based on the principal axis of the character shapes.
     * `outline`: A purely vector-based method that creates an outline/inline effect.
     * `centerline_trace`: A complex method that generates a centerline skeleton for each character, aligns them, and applies a calligraphic stroke.
+* **Multiple Alignment Strategies**: 
+    * `centroid`: A simple union based on aligning the geometric centers.
+    * `iterative_registration`: Shape overlap maximization.
+[    * `principal_axis`: A more stable alignment based on the principal axis of the character shapes.]: #
 * **Flexible Ambigram Creation**:
     * Create palindromic ambigrams from a single word (e.g., "level").
     * Create a simple ambigram of a non-palidromic single word that will read the same "upside-down".
@@ -84,6 +86,7 @@ python fambigen.py word1 [word2] [--font FONT_PATH] [--strategy STRATEGY_NAME]
 * `-f, --font`: (Optional) The full path to the `.ttf` font file you wish to use. Defaults to Arial.
 * `-f2, --font2`: (Optional) The full path to a second `.ttf` font file you wish to use. Defaults to font1.
 * `-s, --strategy`: (Optional) The generation strategy to use. Choices are `centroid`, `principal_axis`, `outline`, and `centerline_trace`. Defaults to `outline`.
+* `--alignment`: (Optional) The glyph alignment strategy to use. Choices are `centroid` and `iterative_registration (shape_overlap maximization).
 * `--uniform-glyphs`: (Optional) Scale fonts to the same size before merging them.
 * `--noambi` : (Optional) Disables ambigrammitization, allowing for font compositing only.
 
