@@ -491,37 +491,35 @@ def generate_ambigram_svg(font, pair, output_dir, strategy_func):
     dwg.save()
     print(f"  -> Saved to {output_filename}")
 
-def create_ambigram_from_string(word1, strategy_name, output_filename, word2=None):
+def create_ambigram_from_string(word1, strategy_name, output_filename, word2=None, target_width=1200, uniform_glyphs=False):
     """
-    Creates a single composite ambigram image from one or two words,
-    preserving case.
-
-    Args:
-        word1 (str): The word that reads forwards.
-        strategy_name (str): The name of the generation strategy (e.g., "outline").
-        output_filename (str): The filename for the final PNG image.
-        word2 (str, optional): The word that reads upon rotation.
-                               If None, a palindromic ambigram of word1 is created.
+    Creates a single composite ambigram image, scaled to a target width,
+    with an option for uniform glyph rendering.
     """
-    # If word2 is not provided, the reversed word1 is used.
-    if not word2:
-        word2 = word1[::-1]
-    
-    print(f"\n--- Composing ambigram for '{word1}' / '{word2}' ---")
+    print(f"\n--- Composing ambigram for '{word1}' / '{word2 if word2 else word1}' ---")
     
     glyph_dir = os.path.join(".", f"generated_glyphs_{strategy_name}")
-
     required_files = [f"{c1}{c2}.svg" for c1, c2 in zip(word1, word2)]
-    
     glyph_images = []
+
+    # --- CONDITIONAL RENDERING LOGIC ---
+    render_params = {}
+    if uniform_glyphs:
+        print("  -> Using uniform glyph height rendering.")
+        GLYPH_RENDER_HEIGHT = 256
+        render_params['output_height'] = GLYPH_RENDER_HEIGHT
+    else:
+        print("  -> Using variable (expressive) glyph height rendering.")
+        # render_params remains empty, so cairosvg will use the SVG's natural size
+
     for filename in required_files:
         filepath = os.path.join(glyph_dir, filename)
         if not os.path.exists(filepath):
             print(f"  -> Warning: Required glyph file not found, skipping: {filepath}")
             continue
-        
         try:
-            png_data = svg2png(url=filepath)
+            # Use the ** operator to pass parameters to svg2png
+            png_data = svg2png(url=filepath, **render_params)
             glyph_image = Image.open(io.BytesIO(png_data))
             glyph_images.append(glyph_image)
             print(f"  -> Loaded and rendered {filename}")
@@ -532,19 +530,27 @@ def create_ambigram_from_string(word1, strategy_name, output_filename, word2=Non
         print("Could not render any glyphs. Aborting composition.")
         return
 
+    # Composition logic is the same...
     total_width = sum(img.width for img in glyph_images)
     max_height = max(img.height for img in glyph_images)
-
     composite_image = Image.new('RGBA', (total_width, max_height), (255, 255, 255, 255))
-    
     current_x = 0
     for img in glyph_images:
-        composite_image.paste(img, (current_x, 0), img)
+        # For variable-height glyphs, we align them to the baseline (bottom)
+        y_pos = max_height - img.height
+        composite_image.paste(img, (current_x, y_pos), img)
         current_x += img.width
 
-    composite_image.save(output_filename)
-    print(f"Ambigram saved successfully to {output_filename}")
+    # Final resizing logic is also the same...
+    current_width, current_height = composite_image.size
+    aspect_ratio = float(current_height) / float(current_width)
+    target_height = int(aspect_ratio * target_width)
 
+    print(f"\nResizing final image to {target_width} x {target_height}...")
+    final_image = composite_image.resize((target_width, target_height), Image.Resampling.LANCZOS)
+
+    final_image.save(output_filename)
+    print(f"\nAmbigram saved successfully to {output_filename}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -576,13 +582,17 @@ if __name__ == "__main__":
         choices=['centroid', 'principal_axis', 'outline', 'centerline_trace', 'half_letters'],
         help="The generation strategy to use. Defaults to 'outline'."
     )
-    
+    parser.add_argument("-w", "--width", type=int, default=1200, help="The final width of the output PNG image in pixels. Defaults to 1200.")
+    parser.add_argument("--uniform-glyphs", action='store_true', help="If included, renders all glyphs at a uniform height before composition.")
+     
     args = parser.parse_args()
 
     INPUT_WORD = args.word1
     INPUT_WORD2 = args.word2
     FONT_FILE_PATH = args.font
-    
+    TARGET_WIDTH = args.width
+    UNIFORM_GLYPHS = args.uniform_glyphs
+
     strategy_map = {
         'centroid': align_using_centroid,
         'principal_axis': align_using_principal_axis,
@@ -603,8 +613,8 @@ if __name__ == "__main__":
     strategy_name = STRATEGY_TO_USE.__name__.replace('generate_using_', '')
     print(f"--- Using strategy: {strategy_name} ---")
 
-    comparison_word = INPUT_WORD2[::-1] if INPUT_WORD2 else INPUT_WORD[::-1]
-    pairs_to_generate = sorted(list(set([c1 + c2 for c1, c2 in zip(INPUT_WORD, comparison_word)])))
+    INPUT_WORD2 = INPUT_WORD2[::-1] if INPUT_WORD2 else INPUT_WORD[::-1]
+    pairs_to_generate = list(set([c1 + c2 for c1, c2 in zip(INPUT_WORD, INPUT_WORD2)]))
     
     print(f"Required pairs to generate: {pairs_to_generate}")
 
@@ -618,5 +628,5 @@ if __name__ == "__main__":
         print(f"\n- Generating glyph for pair: '{pair}'")
         generate_ambigram_svg(font, pair, ".", STRATEGY_TO_USE)
 
-    output_filename = f"{INPUT_WORD}{'-' + INPUT_WORD2 if INPUT_WORD2 else ''}_{os.path.basename(FONT_FILE_PATH)}_ambigram.png"
-    create_ambigram_from_string(INPUT_WORD, strategy_name, output_filename, word2=comparison_word)  
+    output_filename = f"{INPUT_WORD}{'-' + INPUT_WORD2[::-1] if INPUT_WORD2 else ''}_{os.path.basename(FONT_FILE_PATH)}{'_uni' if UNIFORM_GLYPHS else ''}_ambigram.png"
+    create_ambigram_from_string(INPUT_WORD, strategy_name, output_filename, word2=INPUT_WORD2, target_width=TARGET_WIDTH)  
