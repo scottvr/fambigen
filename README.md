@@ -84,7 +84,7 @@ python fambigen.py word1 [word2] [--font FONT_PATH] [--strategy STRATEGY_NAME]
 * `-f, --font`: (Optional) The full path to the `.ttf` font file you wish to use. Defaults to Arial.
 * `-f2, --font2`: (Optional) The full path to ia second `.ttf` font file you wish to use. Defaults to font1.
 * `-s, --strategy`: (Optional) The generation strategy to use. Choices are `centroid`, `principal_axis`, `outline`, and `centerline_trace`. Defaults to `outline`.
-* `--uniform-glyphs`: (Optional) Scale fonts to the same size before operating on them.
+* `--uniform-glyphs`: (Optional) Scale fonts to the same size before merging them.
 * `--noambi` : (Optional) Disables ambigrammitization, allowing for font compositing only.
 
 ### Examples
