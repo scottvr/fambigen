@@ -16,13 +16,13 @@ I also wanted to see if I could experiment with ways to programmatically take st
 
 ## Examples
 
-`ycombinator-hackernews-arial-blk.png`
+`deadbeef`
 
-![ycombinator-hackernews!](https://github.com/scottvr/fambigen/blob/42c489644b62dacf00f2eda971fb4dbf0079153a/assets/ycombinator-hackernews!_ariblk.ttf_ambigram.png)
+![deadbeef](https://killsignal.net/deadbeef/deadbeef-deadbeef_Inkfree.ttf_ambigram.png)
 
 `ycombinator-hackernews-arial`
 
-![](https://github.com/scottvr/fambigen/blob/42c489644b62dacf00f2eda971fb4dbf0079153a/assets/ycombinator-hackernews!_arial.ttf_ambigram.png)
+![ycombinator-hackernews-ariblk.png](https://github.com/scottvr/fambigen/blob/91c22b352f2aad22b219de4b385bf38ed46bee0f/assets/ycombinator-hackernews!_ariblk.ttf_ambigram.png)
 
 `kitten-bundle.png`
 ![](https://github.com/scottvr/fambigen/blob/42c489644b62dacf00f2eda971fb4dbf0079153a/assets/kitten-bundle_ambigram.png)
