@@ -46,6 +46,17 @@ I also wanted to see if I could experiment with ways to programmatically take st
 * **Mixed-Case Support**: Correctly generates glyphs from pairs of uppercase and lowercase characters (e.g., 'M' and 'e').
 * **Dual Output**: Generates both the individual SVG vector glyphs for each pair and a final composed PNG raster image for the full word.
 
+---
+
+New alignment strategy examples:
+
+`centroid`
+
+[centroid example](https://killsignal.net/deadbeef/GOD-GOD_arial.ttf-centroid_ambigram.png)
+
+`iterative_registration (shape overlap)`
+
+[iterative registration](https://killsignal.net/deadbeef/GOD-GOD_arial.ttf-iterative_registration_ambigram.png)
 ## Requirements
 
 This project uses several Python libraries for font manipulation, vector graphics, and image processing. A `requirements.txt` file is included, and you can install all dependencies using `pip`.
