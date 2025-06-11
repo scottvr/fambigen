@@ -24,8 +24,7 @@ I also wanted to see if I could experiment with ways to programmatically take st
 
 ![ycombinator-hackernews-ariblk.png](https://github.com/scottvr/fambigen/blob/91c22b352f2aad22b219de4b385bf38ed46bee0f/assets/ycombinator-hackernews!_ariblk.ttf_ambigram.png)
 
-`kitten-bundle.png`
-![](https://github.com/scottvr/fambigen/blob/42c489644b62dacf00f2eda971fb4dbf0079153a/assets/kitten-bundle_ambigram.png)
+[kitten bundle](https://github.com/scottvr/fambigen/blob/42c489644b62dacf00f2eda971fb4dbf0079153a/assets/kitten-bundle_ambigram.png)
 
 
 ## Features
@@ -52,11 +51,11 @@ New alignment strategy examples:
 
 `centroid`
 
-[centroid example](https://killsignal.net/deadbeef/GOD-GOD_arial.ttf-centroid_ambigram.png)
+![centroid example](https://killsignal.net/deadbeef/GOD-GOD_arial.ttf-centroid_ambigram.png)
 
 `iterative_registration (shape overlap)`
 
-[iterative registration](https://killsignal.net/deadbeef/GOD-GOD_arial.ttf-iterative_registration_ambigram.png)
+![iterative registration](https://killsignal.net/deadbeef/GOD-GOD_arial.ttf-iterative_registration_ambigram.png)
 ## Requirements
 
 This project uses several Python libraries for font manipulation, vector graphics, and image processing. A `requirements.txt` file is included, and you can install all dependencies using `pip`.
