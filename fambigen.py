@@ -124,6 +124,119 @@ def align_using_principal_axis(path1_raw, path2_rotated, pair=""):
         print("  -> Warning: Could not compute principal axis. Falling back to centroid.")
         return align_using_centroid(path1_raw, path2_rotated, glyph_set)
 
+def calculate_path_area(path, canvas_size=256):
+    """Calculates the approximate area of a SkiaPath by rasterizing and filling it."""
+    if not path or not path.bounds:
+        return 0
+    
+    bounds = path.bounds
+    # Prevent division by zero for paths with no width or height
+    path_width = bounds[2] - bounds[0]
+    path_height = bounds[3] - bounds[1]
+    if path_width <= 0 or path_height <= 0:
+        return 0
+
+    # Scale the path to fit within the canvas for consistent area measurement
+    padding = canvas_size * 0.05 # 5% padding
+    usable_size = canvas_size - 2 * padding
+    scale = usable_size / max(path_width, path_height)
+    transform = Transform().translate(-bounds[0], -bounds[1]).translate(padding, padding).scale(scale)
+    
+    render_pen = SkiaPathPen()
+    path.draw(TransformPen(render_pen, transform))
+    
+    img = Image.new("1", (canvas_size, canvas_size), 0)
+    draw = ImageDraw.Draw(img)
+    
+    # Use the existing contour-building logic to draw a filled polygon
+    contours, current_contour = [], []
+    for verb, pts in render_pen.path:
+        if verb == "moveTo":
+            if current_contour: contours.append(current_contour)
+            current_contour = list(pts)
+        else:
+            current_contour.extend(pts)
+    if current_contour: contours.append(current_contour)
+
+    for contour in contours:
+        flat_contour = [coord for point in contour for coord in point]
+        if len(flat_contour) >= 6: # Need at least 3 points for a polygon
+             draw.polygon(flat_contour, fill=1)
+
+    # The "area" is the sum of all white pixels
+    return np.sum(np.array(img))
+
+def align_using_iterative_registration(path1_raw, path2_rotated, pair=""):
+    """
+    Aligns two paths by iteratively searching for the translation that
+    maximizes the area of their intersection, then returns their union.
+    """
+    print("  -> Using Iterative Shape Registration")
+
+    # 1. Get initial bounds and check for validity
+    bounds1 = path1_raw.bounds
+    bounds2 = path2_rotated.bounds
+    if not bounds1 or not bounds2: return None
+        
+    # 2. Set up the reference path (path1) centered at the origin
+    cx1, cy1 = (bounds1[0] + bounds1[2]) / 2, (bounds1[1] + bounds1[3]) / 2
+    center_transform1 = Transform().translate(-cx1, -cy1)
+    pen1_centered = SkiaPathPen()
+    path1_raw.draw(TransformPen(pen1_centered, center_transform1))
+    path1_centered = pen1_centered.path
+
+    # 3. Perform an iterative search to find the best alignment for path2
+    best_overlap = -1.0
+    best_transform_for_path2 = None
+    cx2, cy2 = (bounds2[0] + bounds2[2]) / 2, (bounds2[1] + bounds2[3]) / 2
+
+    # --- CORRECTED PARAMETERS ---
+    # Define search parameters based on the glyph's size for robustness.
+    max_dim = max(bounds1[2] - bounds1[0], bounds1[3] - bounds1[1], bounds2[2] - bounds2[0], bounds2[3] - bounds2[1])
+    # Search in a more focused radius (e.g., 30% of the max glyph dimension).
+    search_range = int(max_dim * 0.3)
+    # Use a much finer step. Aim for ~40 total steps across the range.
+    # This is the key change to ensure we don't miss the optimal alignment.
+    num_steps_in_radius = 20 
+    step = max(2, int(search_range / num_steps_in_radius))
+
+    print(f"  -> Searching in a {search_range*2}x{search_range*2} unit area with a step of {step}...")
+    for dx in range(-search_range, search_range + 1, step):
+        for dy in range(-search_range, search_range + 1, step):
+            # The current transform for path2 is:
+            # 1. Move its original centroid to the origin (like path1)
+            # 2. Apply the iterative offset (dx, dy) to search for a better fit
+            current_transform = Transform().translate(-cx2 + dx, -cy2 + dy)
+            
+            path2_temp_pen = SkiaPathPen()
+            path2_rotated.draw(TransformPen(path2_temp_pen, current_transform))
+            path2_transformed = path2_temp_pen.path
+
+            # Calculate the area of the intersection
+            intersection_pen = SkiaPathPen()
+            intersection((path1_centered,), (path2_transformed,), intersection_pen)
+            overlap_area = calculate_path_area(intersection_pen.path)
+
+            # If this is the best overlap so far, store it
+            if overlap_area > best_overlap:
+                best_overlap = overlap_area
+                best_transform_for_path2 = current_transform
+    
+    # If no overlap was ever found, fall back to the simple centroid method
+    if best_transform_for_path2 is None:
+        print("  -> Warning: Iterative registration failed to find an overlap. Falling back to centroid.")
+        return align_using_centroid(path1_raw, path2_rotated, pair)
+
+    print(f"  -> Best overlap found with score: {best_overlap:.2f}")
+
+    # 4. Apply the best found transform to path2
+    pen2_final_aligned = SkiaPathPen()
+    path2_rotated.draw(TransformPen(pen2_final_aligned, best_transform_for_path2))
+
+    # 5. Union the centered path1 and the optimally aligned path2
+    result_pen = SkiaPathPen()
+    union([path1_centered, pen2_final_aligned.path], result_pen)
+    return result_pen.path
 
 def get_vector_skeleton(char, font):
     """
@@ -218,12 +331,14 @@ def rasterize_path(draw_context, path_to_draw, line_width=2):
             flat_line = [coord for point in contour for coord in point]
             draw_context.line(flat_line, fill=1, width=line_width)
 
-def generate_using_outline(path1_raw, path2_rotated, pair=""):
+def generate_using_outline(path1_raw, path2_rotated, pair="", alignment_func=align_using_centroid):
     """
     Creates an outline glyph.
     """
     try:
-        base_merged_path = align_using_centroid(path1_raw, path2_rotated, pair)
+        print(f"  -> Using '{alignment_func.__name__}' for alignment.")
+        base_merged_path = alignment_func(path1_raw, path2_rotated, pair)
+
         if not base_merged_path or not base_merged_path.bounds:
             return None
 
@@ -431,14 +546,20 @@ def generate_using_half_letters(path1_raw, path2_rotated, pair=""):
         print(f"  -> ERROR in half_letters strategy: {e}\n{traceback.format_exc()}")
         return None
 
-def generate_ambigram_svg(font1, font2, pair, output_dir, strategy_func, uniform_glyphs=False):
+def generate_ambigram_svg(font1, font2, pair, output_dir, strategy_func, uniform_glyphs=False, alignment_func=align_using_centroid):
     """Generates an ambigram SVG using a specified strategy function."""
     if len(pair) != 2: return
         
     char1, char2 = pair[0], pair[1]
     
+    align_name = alignment_func.__name__.replace('align_using_', '')
     strategy_name = strategy_func.__name__.replace('align_using_', '').replace('generate_using_', '')
-    strategy_output_dir = os.path.join(output_dir, f"generated_glyphs_{strategy_name}")
+
+    output_folder_name = f"generated_glyphs_{strategy_name}"
+    if strategy_func == generate_using_outline: # Only add alignment name for relevant strategies
+        output_folder_name += f"_{align_name}"
+
+    strategy_output_dir = os.path.join(output_dir, output_folder_name)    
     if not os.path.exists(strategy_output_dir):
         os.makedirs(strategy_output_dir)
         
@@ -498,7 +619,7 @@ def generate_ambigram_svg(font1, font2, pair, output_dir, strategy_func, uniform
     if not path1_raw.bounds or not path2_rotated.bounds: return
 
     # --- Call Strategy with prepared paths ---
-    merged_skia_path = strategy_func(path1_raw, path2_rotated, pair)
+    merged_skia_path = strategy_func(path1_raw, path2_rotated, pair, alignment_func=alignment_func)
 
     if not merged_skia_path:
         print(f"  -> Warning: Strategy '{strategy_name}' failed for '{pair}'. Skipping.")
@@ -534,6 +655,7 @@ def create_ambigram_from_string(word1, strategy_name, output_filename, word2=Non
     """
     print(f"\n--- Composing ambigram for '{word1}' / '{word2 if word2 else word1}' ---")
     
+    strategy_name = strategy_name.replace('align_using_', '').replace('generate_using_', '')
     glyph_dir = os.path.join(".", f"generated_glyphs_{strategy_name}")
     required_files = [f"{c1}{c2}.svg" for c1, c2 in zip(word1, word2)]
     glyph_images = []
@@ -608,7 +730,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-f", "--font", 
         type=str, 
-        default="C:/Windows/Fonts/Arial.ttf",
+        default="C:\\Windows\\Fonts\\arial.ttf",
         help="Path to the TTF font file to use.\nDefaults to Arial on Windows."
     )
     parser.add_argument(
@@ -621,8 +743,15 @@ if __name__ == "__main__":
         "-s", "--strategy",
         type=str,
         default="outline",
-        choices=['centroid', 'principal_axis', 'outline', 'centerline_trace', 'half_letters'],
-        help="The generation strategy to use. Defaults to 'outline'."
+        choices=['outline', 'centerline_trace', 'half_letters'],
+        help="The generation strategy to use. 'outline' is a style that can be combined with different alignments. Others are standalone."
+    )
+    parser.add_argument(
+        "-a", "--alignment",
+        type=str,
+        default="centroid",
+        choices=['centroid', 'principal_axis', 'iterative_registration'],
+        help="The alignment method to use for strategies that support it (e.g., 'outline')."
     )
     parser.add_argument("-w", "--width", type=int, default=1200, help="The final width of the output PNG image in pixels. Defaults to 1200.")
     parser.add_argument("--uniform-glyphs", action='store_true', help="If included, renders all glyphs at a uniform height before composition.")
@@ -634,6 +763,8 @@ if __name__ == "__main__":
     INPUT_WORD2 = args.word2
     FONT1_FILE_PATH = args.font
     FONT2_FILE_PATH = args.font2
+    print(f'DEBUG: FONT1_FILE_PATH {FONT1_FILE_PATH}')
+    print(f'DEBUG: FONT2_FILE_PATH {FONT2_FILE_PATH}')
     TARGET_WIDTH = args.width
     UNIFORM_GLYPHS = args.uniform_glyphs
 
@@ -642,9 +773,17 @@ if __name__ == "__main__":
         'principal_axis': align_using_principal_axis,
         'outline': generate_using_outline,
         'centerline_trace': generate_using_centerline_trace,
-        'half_letters': generate_using_half_letters 
+        'half_letters': generate_using_half_letters,
+        'iterative_registration': align_using_iterative_registration
     }
     STRATEGY_TO_USE = strategy_map[args.strategy]
+
+    alignment_map = {
+        'centroid': align_using_centroid,
+        'principal_axis': align_using_principal_axis,
+        'iterative_registration': align_using_iterative_registration,
+    }
+    ALIGNMENT_TO_USE = alignment_map[args.alignment]
 
     if INPUT_WORD2 and len(INPUT_WORD) != len(INPUT_WORD2):
         print(f"ERROR: Input words '{INPUT_WORD}' and '{INPUT_WORD2}' must be the same length.")
@@ -667,18 +806,19 @@ if __name__ == "__main__":
 
     try:
         font1 = TTFont(FONT1_FILE_PATH)
+        print(f"DEBUG: {font1['head']}")
     except Exception as e:
         print(f"CRITICAL ERROR: Could not load font1. Aborting. Details: {e}")
         exit()
     try:
         font2 = TTFont(FONT2_FILE_PATH) if FONT2_FILE_PATH and os.path.exists(FONT2_FILE_PATH) else font1
+        print(f"DEBUG: {font2['head']}")
     except Exception as e:
         print(f"WARNING: Could not load font2. Falling back to font1. Details: {e}")
 
     for pair in pairs_to_generate:
         print(f"\n- Generating glyph for pair: '{pair}'")
-        # --- FIX: Pass the UNIFORM_GLYPHS flag to the generator ---
-        generate_ambigram_svg(font1, font2, pair, ".", STRATEGY_TO_USE, uniform_glyphs=UNIFORM_GLYPHS)
+        generate_ambigram_svg(font1, font2, pair, ".", STRATEGY_TO_USE, alignment_func=ALIGNMENT_TO_USE, uniform_glyphs=UNIFORM_GLYPHS)
 
-    output_filename = f"{INPUT_WORD}{'-' + INPUT_WORD2 if args.noambi else INPUT_WORD2[::-1] if INPUT_WORD2 else ''}_{os.path.basename(FONT1_FILE_PATH)}{'_uni' if UNIFORM_GLYPHS else ''}{'-' + os.path.basename(FONT2_FILE_PATH) if FONT2_FILE_PATH and font1 != font2 else ''}_{'no' if args.noambi else ''}ambigram.png"
+    output_filename = f"{INPUT_WORD}{'-' + (INPUT_WORD2 if args.noambi else INPUT_WORD2[::-1] if INPUT_WORD2 else '')}_{os.path.basename(FONT1_FILE_PATH)}{'_uni' if UNIFORM_GLYPHS else ''}{'-' + os.path.basename(FONT2_FILE_PATH) if FONT2_FILE_PATH and font1 != font2 else ''}_{'no' if args.noambi else ''}ambigram.png"
     create_ambigram_from_string(INPUT_WORD, strategy_name, output_filename, word2=INPUT_WORD2, target_width=TARGET_WIDTH, uniform_glyphs=UNIFORM_GLYPHS)
