@@ -56,18 +56,6 @@ New alignment strategy examples:
 `iterative_registration (shape overlap)`
 
 ![iterative registration](https://killsignal.net/deadbeef/GOD-GOD_arial.ttf-iterative_registration_ambigram.png)
-## Requirements
-
-This project uses several Python libraries for font manipulation, vector graphics, and image processing. A `requirements.txt` file is included, and you can install all dependencies using `pip`.
-
-The main libraries are:
-* `fonttools`
-* `skia-pathops`
-* `svgwrite`
-* `numpy`
-* `Pillow`
-* `scikit-image`
-* `cairosvg`
 
 ## Installation
 
