@@ -572,7 +572,7 @@ def generate_using_half_letters(path1_raw, path2_rotated, pair=""):
     and then rotating and aligning the resulting pieces.
     """
     try:
-        # Calculate alignment transforms from the FULL paths BEFORE clipping ---
+        # Calculate alignment transforms from the FULL paths BEFORE clipping
         bounds1 = path1_raw.bounds
         if not bounds1: return None
         cx1, cy1 = (bounds1[0] + bounds1[2]) / 2, (bounds1[1] + bounds1[3]) / 2
@@ -583,14 +583,14 @@ def generate_using_half_letters(path1_raw, path2_rotated, pair=""):
         cx2, cy2 = (bounds2[0] + bounds2[2]) / 2, (bounds2[1] + bounds2[3]) / 2
         transform2 = Transform().translate(-cx2, -cy2)
 
-        # Get the top half of the original char1 ---
+        # Get the top half of the original char1
         top_half_y_mid1 = (bounds1[1] + bounds1[3]) / 2
         clip_box1 = create_rect_path((bounds1[0] - 1, top_half_y_mid1, bounds1[2] + 1, bounds1[3] + 1))
         top_half_pen1 = SkiaPathPen()
         intersection((path1_raw,), (clip_box1,), top_half_pen1)
         top_half1 = top_half_pen1.path
 
-        # Get the top half of the original char2 ---
+        # Get the top half of the original char2
         path2_raw_temp_pen = SkiaPathPen()
         path2_rotated.draw(TransformPen(path2_raw_temp_pen, Transform().rotate(math.pi)))
         path2_raw_temp = path2_raw_temp_pen.path
@@ -603,7 +603,7 @@ def generate_using_half_letters(path1_raw, path2_rotated, pair=""):
         intersection((path2_raw_temp,), (clip_box2,), top_half_pen2)
         top_half2 = top_half_pen2.path
 
-        # Apply pre-calculated transforms to the clipped halves ---
+        # Apply pre-calculated transforms to the clipped halves
         aligned_half1_pen = SkiaPathPen(glyph_set)
         top_half1.draw(TransformPen(aligned_half1_pen, transform1))
         aligned_half1 = aligned_half1_pen.path
