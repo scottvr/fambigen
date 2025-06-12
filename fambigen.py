@@ -27,7 +27,7 @@ from scipy.ndimage import rotate
 from scipy.spatial.distance import directed_hausdorff
 from cairosvg import svg2png
 
-import faulthandler
+#import faulthandler
 
 class SkiaPathPen(BasePen):
     """A pen to convert glyph outlines into a skia-pathops Path object."""
@@ -323,7 +323,7 @@ def align_using_iterative_registration(path1_raw, path2_rotated, pair=""):
         print("  -> Warning: Iterative registration failed to find an overlap. Falling back to centroid.")
         return align_using_centroid(path1_raw, path2_rotated, pair)
 
-    print(f"  -> Best overlap found with score: {best_overlap:.2f}")
+    print(f"  -> Best overlap found with score: {best_overlap:.4f}")
 
     # Apply the best found transform to path2
     pen2_final_aligned = SkiaPathPen()
