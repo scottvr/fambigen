@@ -127,16 +127,6 @@ The script operates in two main stages:
     * It uses the `cairosvg` library to render each SVG into an in-memory PNG image.
     * Finally, it uses the `Pillow` library to stitch these individual glyph images together side-by-side into a single composite PNG file.
 
-## Contributing
-
-It is a fair way from perfect so you issues, fixes, enhancements, etc are welcome! If you'd like to add a new strategy, improve an existing one, or add features, please feel free to:
-
-1.  Fork the repository.
-2.  Create a new branch for your feature.
-3.  Commit your changes.
-4.  Push to the branch 
-5.  Open a Pull Request.
-
 ## License
 
 This project is licensed under the MIT Licenset push
