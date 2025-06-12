@@ -19,8 +19,9 @@ from fontTools.ttLib import TTFont
 from fontTools.pens.basePen import BasePen, NullPen
 from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.pens.transformPen import TransformPen
-from fontPens.flattenPen import FlattenPen
 from fontTools.misc.transform import Transform
+from fontTools.pens.recordingPen import RecordingPen
+from fontPens.flattenPen import FlattenPen
 from pathops import Path as SkiaPath, union, difference, xor, intersection
 from scipy.ndimage import rotate
 from scipy.spatial.distance import directed_hausdorff
@@ -60,65 +61,41 @@ def create_rect_path(bounds_tuple):
     rect_path.close()
     return rect_path
 
-# Make sure these imports are at the top of your file
-from fontTools.pens.recordingPen import RecordingPen
-from fontPens.flattenPen import FlattenPen
-
-# ...
-
-# Make sure these imports are at the top of your file
-from fontTools.pens.recordingPen import RecordingPen
-from fontPens.flattenPen import FlattenPen
-
-# ...
 
 def convert_path_to_points(path, num_points=150):
     """Converts a SkiaPath to a numpy array of 'num_points' equidistant points."""
     if not path or not path.bounds:
         return np.array([])
 
-    # 1. Use a RecordingPen to capture the output of the FlattenPen.
     recording_pen = RecordingPen()
     flatten_pen = FlattenPen(recording_pen, approximateSegmentLength=5)
     path.draw(flatten_pen)
 
-    # 2. Extract the points from the recording.
     pts = []
     for command, data in recording_pen.value:
-        # CORRECTED LOGIC: Only process commands that have point data.
-        # This safely ignores commands like 'closePath' which have an empty data tuple.
         if data:
             pts.append(data[-1])
     
     if len(pts) < 2:
         return np.array([pts]) if pts else np.array([])
 
-    # Convert to a numpy array for calculations
     pts = np.array(pts)
-
-    # 3. Calculate segment lengths and total perimeter (this part is unchanged)
     segments = np.sqrt(np.sum(np.diff(pts, axis=0)**2, axis=1))
     perimeter = np.sum(segments)
     
     if perimeter == 0:
         return pts # Return the existing points if path has no length
 
-    # Create an array of cumulative distances along the path
     cumulative_dist = np.insert(np.cumsum(segments), 0, 0)
     
-    # Create evenly spaced intervals for sampling
     dist_samples = np.linspace(0, perimeter, num_points)
     
-    # Interpolate points at the sample distances
     interp_pts = np.zeros((num_points, 2))
     for i, d in enumerate(dist_samples):
         # Find which segment this distance falls into
         segment_index = np.searchsorted(cumulative_dist, d, side='right') - 1
-        
-        # Ensure index is within bounds
         segment_index = max(0, min(segment_index, len(segments) - 1))
 
-        # Calculate how far along the segment the point is
         dist_into_segment = d - cumulative_dist[segment_index]
         segment_len = segments[segment_index]
         
@@ -138,11 +115,9 @@ def normalize_point_cloud(points):
     if points.shape[0] < 2:
         return points
     
-    # 1. Translate to origin (center the centroid at 0,0)
     centroid = np.mean(points, axis=0)
     centered_points = points - centroid
     
-    # 2. Scale to a unit size (max absolute coordinate becomes 1.0)
     max_val = np.max(np.abs(centered_points))
     if max_val > 0:
         normalized_points = centered_points / max_val
@@ -161,13 +136,11 @@ def calculate_legibility_score(generated_path, canonical_path1, canonical_path2)
     if not generated_path or not canonical_path1 or not canonical_path2:
         return float('inf') # Return a worst-case score for invalid paths
 
-    # --- 1. Create rotated version of the generated path ---
     rotation = Transform().rotate(math.pi)
     rotated_pen = SkiaPathPen()
     generated_path.draw(TransformPen(rotated_pen, rotation))
     generated_path_rotated = rotated_pen.path
 
-    # --- 2. Convert all paths to point clouds ---
     points_gen_upright = convert_path_to_points(generated_path)
     points_gen_rotated = convert_path_to_points(generated_path_rotated)
     points_canon1 = convert_path_to_points(canonical_path1)
@@ -176,13 +149,11 @@ def calculate_legibility_score(generated_path, canonical_path1, canonical_path2)
     if any(p.size == 0 for p in [points_gen_upright, points_gen_rotated, points_canon1, points_canon2]):
         return float('inf') # Cannot compare if any path is empty
 
-    # --- 3. Normalize all point clouds for fair comparison ---
     norm_gen_upright = normalize_point_cloud(points_gen_upright)
     norm_gen_rotated = normalize_point_cloud(points_gen_rotated)
     norm_canon1 = normalize_point_cloud(points_canon1)
     norm_canon2 = normalize_point_cloud(points_canon2)
 
-    # --- 4. Calculate the two-way Hausdorff distances ---
     # The full Hausdorff distance is the max of the two directed distances.
     # This measures how far P1 is from P2 and vice-versa.
     d1_forward = directed_hausdorff(norm_gen_upright, norm_canon1)[0]
@@ -193,7 +164,6 @@ def calculate_legibility_score(generated_path, canonical_path1, canonical_path2)
     d2_backward = directed_hausdorff(norm_canon2, norm_gen_rotated)[0]
     d2 = max(d2_forward, d2_backward)
 
-    # --- 5. Return the final RMS score ---
     rms_score = np.sqrt((d1**2 + d2**2) / 2)
     
     return rms_score
@@ -285,7 +255,6 @@ def calculate_path_area(path, canvas_size=256):
     img = Image.new("1", (canvas_size, canvas_size), 0)
     draw = ImageDraw.Draw(img)
     
-    # Use the existing contour-building logic to draw a filled polygon
     contours, current_contour = [], []
     for verb, pts in render_pen.path:
         if verb == "moveTo":
@@ -310,24 +279,21 @@ def align_using_iterative_registration(path1_raw, path2_rotated, pair=""):
     """
     print("  -> Using Iterative Shape Registration")
 
-    # 1. Get initial bounds and check for validity
     bounds1 = path1_raw.bounds
     bounds2 = path2_rotated.bounds
     if not bounds1 or not bounds2: return None
         
-    # 2. Set up the reference path (path1) centered at the origin
     cx1, cy1 = (bounds1[0] + bounds1[2]) / 2, (bounds1[1] + bounds1[3]) / 2
     center_transform1 = Transform().translate(-cx1, -cy1)
     pen1_centered = SkiaPathPen()
     path1_raw.draw(TransformPen(pen1_centered, center_transform1))
     path1_centered = pen1_centered.path
 
-    # 3. Perform an iterative search to find the best alignment for path2
     best_overlap = -1.0
     best_transform_for_path2 = None
     cx2, cy2 = (bounds2[0] + bounds2[2]) / 2, (bounds2[1] + bounds2[3]) / 2
 
-    # Define search parameters based on the glyph's size for robustness.
+    # Define search parameters based on the glyph's size
     max_dim = max(bounds1[2] - bounds1[0], bounds1[3] - bounds1[1], bounds2[2] - bounds2[0], bounds2[3] - bounds2[1])
     search_range = int(max_dim * 0.1)
     num_steps_in_radius = 20 
@@ -345,28 +311,25 @@ def align_using_iterative_registration(path1_raw, path2_rotated, pair=""):
             path2_rotated.draw(TransformPen(path2_temp_pen, current_transform))
             path2_transformed = path2_temp_pen.path
 
-            # Calculate the area of the intersection
             intersection_pen = SkiaPathPen()
             intersection((path1_centered,), (path2_transformed,), intersection_pen)
             overlap_area = calculate_path_area(intersection_pen.path)
 
-            # If this is the best overlap so far, store it
             if overlap_area > best_overlap:
                 best_overlap = overlap_area
                 best_transform_for_path2 = current_transform
     
-    # If no overlap was ever found, fall back to the simple centroid method
     if best_transform_for_path2 is None:
         print("  -> Warning: Iterative registration failed to find an overlap. Falling back to centroid.")
         return align_using_centroid(path1_raw, path2_rotated, pair)
 
     print(f"  -> Best overlap found with score: {best_overlap:.2f}")
 
-    # 4. Apply the best found transform to path2
+    # Apply the best found transform to path2
     pen2_final_aligned = SkiaPathPen()
     path2_rotated.draw(TransformPen(pen2_final_aligned, best_transform_for_path2))
 
-    # 5. Union the centered path1 and the optimally aligned path2
+    # Union the centered path1 and the optimally aligned path2
     result_pen = SkiaPathPen()
     union([path1_centered, pen2_final_aligned.path], result_pen)
     return result_pen.path
@@ -444,7 +407,6 @@ def rasterize_path(draw_context, path_to_draw, line_width=2):
     if not path_to_draw or not path_to_draw.bounds:
         return
 
-    # This contour-building logic is the most stable method we've found.
     contours = []
     current_contour = []
     for verb, pts in path_to_draw:
@@ -610,7 +572,7 @@ def generate_using_half_letters(path1_raw, path2_rotated, pair=""):
     and then rotating and aligning the resulting pieces.
     """
     try:
-        # --- Step 1: Calculate alignment transforms from the FULL paths BEFORE clipping ---
+        # Calculate alignment transforms from the FULL paths BEFORE clipping ---
         bounds1 = path1_raw.bounds
         if not bounds1: return None
         cx1, cy1 = (bounds1[0] + bounds1[2]) / 2, (bounds1[1] + bounds1[3]) / 2
@@ -621,15 +583,14 @@ def generate_using_half_letters(path1_raw, path2_rotated, pair=""):
         cx2, cy2 = (bounds2[0] + bounds2[2]) / 2, (bounds2[1] + bounds2[3]) / 2
         transform2 = Transform().translate(-cx2, -cy2)
 
-        # --- Step 2: Get the top half of the original char1 ---
+        # Get the top half of the original char1 ---
         top_half_y_mid1 = (bounds1[1] + bounds1[3]) / 2
-        # CORRECTED: Clip from the midpoint to the character's bottom (higher Y-value) to get the top half.
         clip_box1 = create_rect_path((bounds1[0] - 1, top_half_y_mid1, bounds1[2] + 1, bounds1[3] + 1))
         top_half_pen1 = SkiaPathPen()
         intersection((path1_raw,), (clip_box1,), top_half_pen1)
         top_half1 = top_half_pen1.path
 
-        # --- Step 3: Get the top half of the original char2 ---
+        # Get the top half of the original char2 ---
         path2_raw_temp_pen = SkiaPathPen()
         path2_rotated.draw(TransformPen(path2_raw_temp_pen, Transform().rotate(math.pi)))
         path2_raw_temp = path2_raw_temp_pen.path
@@ -637,13 +598,12 @@ def generate_using_half_letters(path1_raw, path2_rotated, pair=""):
         bounds2_raw = path2_raw_temp.bounds
         if not bounds2_raw: return None
         top_half_y_mid2 = (bounds2_raw[1] + bounds2_raw[3]) / 2
-        # CORRECTED: Clip from the midpoint to the character's bottom to get the top half.
         clip_box2 = create_rect_path((bounds2_raw[0] - 1, top_half_y_mid2, bounds2_raw[2] + 1, bounds2_raw[3] + 1))
         top_half_pen2 = SkiaPathPen(glyph_set)
         intersection((path2_raw_temp,), (clip_box2,), top_half_pen2)
         top_half2 = top_half_pen2.path
 
-        # --- Step 4: Apply the pre-calculated transforms to the clipped halves ---
+        # Apply pre-calculated transforms to the clipped halves ---
         aligned_half1_pen = SkiaPathPen(glyph_set)
         top_half1.draw(TransformPen(aligned_half1_pen, transform1))
         aligned_half1 = aligned_half1_pen.path
@@ -655,13 +615,12 @@ def generate_using_half_letters(path1_raw, path2_rotated, pair=""):
         rotated_half2_pen.path.draw(TransformPen(aligned_half2_pen, transform2))
         aligned_half2 = aligned_half2_pen.path
 
-        # --- Step 5: Union the two perfectly aligned halves ---
         merged_halves_pen = SkiaPathPen(glyph_set)
         union((aligned_half1, aligned_half2), merged_halves_pen)
         merged_halves_path = merged_halves_pen.path
         if not merged_halves_path or not merged_halves_path.bounds: return None
 
-        # --- Step 6: Apply the vector outline logic ---
+        # Apply the vector outline logic
         bounds = merged_halves_path.bounds
         cx, cy = (bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2
         scale_factor = 0.88
@@ -735,7 +694,6 @@ def generate_ambigram_svg(font1, font2, pair, output_dir, strategy_func, uniform
 
     if not glyph_name1 or not glyph_name2: return
 
-    # --- Path Extraction ---
     pen1_raw = SkiaPathPen(glyph_set1)
     glyph_set1[glyph_name1].draw(pen1_raw)
     path1_raw = pen1_raw.path
@@ -770,7 +728,6 @@ def generate_ambigram_svg(font1, font2, pair, output_dir, strategy_func, uniform
                 path2_raw.draw(TransformPen(scaled_pen2, transform2))
                 path2_raw = scaled_pen2.path
     
-    # --- Rotate Path 2 (after potential scaling) ---
     pen2_rotated = SkiaPathPen(glyph_set2)
     if args.noambi:
         path2_rotated = path2_raw
@@ -780,7 +737,6 @@ def generate_ambigram_svg(font1, font2, pair, output_dir, strategy_func, uniform
 
     if not path1_raw.bounds or not path2_rotated.bounds: return
 
-    # --- Call Strategy with prepared paths ---
     merged_skia_path = strategy_func(path1_raw, path2_rotated, pair, alignment_func=alignment_func)
     save_path_as_svg(merged_skia_path, output_filename, glyph_set1)
 
@@ -996,10 +952,8 @@ if __name__ == "__main__":
         print(f"\n- Generating glyph for pair: '{pair}'")
 
         if args.select_best:
-            # --- NEW WORKFLOW: Test and select the best glyph ---
             print(f"  -> --select-best enabled: Finding optimal alignment for '{pair}'")
 
-            # 1. Get raw paths for the source characters
             glyph_set1 = font1.getGlyphSet()
             glyph_name1 = font1.getBestCmap().get(ord(pair[0]))
             pen1_raw = SkiaPathPen(glyph_set1)
@@ -1012,24 +966,20 @@ if __name__ == "__main__":
             glyph_set2[glyph_name2].draw(pen2_raw)
             path2_raw = pen2_raw.path
 
-            # Rotate path2
             pen2_rotated = SkiaPathPen(glyph_set2)
             path2_raw.draw(TransformPen(pen2_rotated, Transform().rotate(math.pi)))
             path2_rotated = pen2_rotated.path
             
-            # 2. Test candidate 1: Outline with Centroid Alignment
             print("  -> Testing candidate: outline + centroid")
             path_centroid = generate_using_outline(path1_raw, path2_rotated, pair, alignment_func=align_using_centroid)
             score_centroid = calculate_legibility_score(path_centroid, path1_raw, path2_raw)
             print(f"  -> Score: {score_centroid:.4f}")
 
-            # 3. Test candidate 2: Outline with Iterative Registration
             print("  -> Testing candidate: outline + iterative_registration")
             path_iterative = generate_using_outline(path1_raw, path2_rotated, pair, alignment_func=align_using_iterative_registration)
             score_iterative = calculate_legibility_score(path_iterative, path1_raw, path2_raw)
             print(f"  -> Score: {score_iterative:.4f}")
 
-            # 4. Compare scores and select the winner
             if score_iterative < score_centroid:
                 print("  -> Winner: Iterative Registration")
                 best_path = path_iterative
@@ -1042,7 +992,6 @@ if __name__ == "__main__":
             winning_glyphs[pair] = winning_align_name
 
             
-            # 5. Save the winning glyph to an appropriately named file
             strategy_output_dir = os.path.join(".", f"generated_glyphs_outline_{winning_align_name}")
             if not os.path.exists(strategy_output_dir):
                 os.makedirs(strategy_output_dir)
