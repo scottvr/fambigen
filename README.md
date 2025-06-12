@@ -42,6 +42,7 @@ I searched a bit online and was surprised to find that this seemed mostly true, 
 * **Custom Fonts**: Supports any TrueType Font (`.ttf`), with Arial as a convenient default.
 * **Mixed-Case Support**: Correctly generates glyphs from pairs of uppercase and lowercase characters (e.g., 'M' and 'e').
 * **Dual Output**: Generates both the individual SVG vector glyphs for each pair and a final composed PNG raster image for the full word.
+* **Font Compositor Mode**: aka `--noambi` will forego the rotation and merging for the purpose of being legible upside-down and will instead just give you a composite of two fonts that you choose, and save an image rendered in that font.
 
 ---
 
