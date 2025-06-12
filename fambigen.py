@@ -16,18 +16,17 @@ from PIL import Image, ImageDraw
 from skimage.morphology import skeletonize, binary_opening, binary_closing, binary_dilation
 from skimage.measure import find_contours, approximate_polygon
 from fontTools.ttLib import TTFont
-from fontTools.pens.basePen import BasePen
+from fontTools.pens.basePen import BasePen, NullPen
 from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.pens.transformPen import TransformPen
 from fontPens.flattenPen import FlattenPen
 from fontTools.misc.transform import Transform
 from pathops import Path as SkiaPath, union, difference, xor, intersection
 from scipy.ndimage import rotate
+from scipy.spatial.distance import directed_hausdorff
 from cairosvg import svg2png
 
 import faulthandler
-
-# --- Pen for Path Extraction ---
 
 class SkiaPathPen(BasePen):
     """A pen to convert glyph outlines into a skia-pathops Path object."""
@@ -60,6 +59,144 @@ def create_rect_path(bounds_tuple):
     rect_path.lineTo(left, bottom)
     rect_path.close()
     return rect_path
+
+# Make sure these imports are at the top of your file
+from fontTools.pens.recordingPen import RecordingPen
+from fontPens.flattenPen import FlattenPen
+
+# ...
+
+# Make sure these imports are at the top of your file
+from fontTools.pens.recordingPen import RecordingPen
+from fontPens.flattenPen import FlattenPen
+
+# ...
+
+def convert_path_to_points(path, num_points=150):
+    """Converts a SkiaPath to a numpy array of 'num_points' equidistant points."""
+    if not path or not path.bounds:
+        return np.array([])
+
+    # 1. Use a RecordingPen to capture the output of the FlattenPen.
+    recording_pen = RecordingPen()
+    flatten_pen = FlattenPen(recording_pen, approximateSegmentLength=5)
+    path.draw(flatten_pen)
+
+    # 2. Extract the points from the recording.
+    pts = []
+    for command, data in recording_pen.value:
+        # CORRECTED LOGIC: Only process commands that have point data.
+        # This safely ignores commands like 'closePath' which have an empty data tuple.
+        if data:
+            pts.append(data[-1])
+    
+    if len(pts) < 2:
+        return np.array([pts]) if pts else np.array([])
+
+    # Convert to a numpy array for calculations
+    pts = np.array(pts)
+
+    # 3. Calculate segment lengths and total perimeter (this part is unchanged)
+    segments = np.sqrt(np.sum(np.diff(pts, axis=0)**2, axis=1))
+    perimeter = np.sum(segments)
+    
+    if perimeter == 0:
+        return pts # Return the existing points if path has no length
+
+    # Create an array of cumulative distances along the path
+    cumulative_dist = np.insert(np.cumsum(segments), 0, 0)
+    
+    # Create evenly spaced intervals for sampling
+    dist_samples = np.linspace(0, perimeter, num_points)
+    
+    # Interpolate points at the sample distances
+    interp_pts = np.zeros((num_points, 2))
+    for i, d in enumerate(dist_samples):
+        # Find which segment this distance falls into
+        segment_index = np.searchsorted(cumulative_dist, d, side='right') - 1
+        
+        # Ensure index is within bounds
+        segment_index = max(0, min(segment_index, len(segments) - 1))
+
+        # Calculate how far along the segment the point is
+        dist_into_segment = d - cumulative_dist[segment_index]
+        segment_len = segments[segment_index]
+        
+        if segment_len > 0:
+            ratio = dist_into_segment / segment_len
+            start_pt = pts[segment_index]
+            end_pt = pts[segment_index + 1]
+            interp_pts[i] = start_pt + ratio * (end_pt - start_pt)
+        else:
+            # If segment has zero length, just use the start point
+            interp_pts[i] = pts[segment_index]
+
+    return interp_pts
+
+def normalize_point_cloud(points):
+    """Translates and scales a point cloud for consistent comparison."""
+    if points.shape[0] < 2:
+        return points
+    
+    # 1. Translate to origin (center the centroid at 0,0)
+    centroid = np.mean(points, axis=0)
+    centered_points = points - centroid
+    
+    # 2. Scale to a unit size (max absolute coordinate becomes 1.0)
+    max_val = np.max(np.abs(centered_points))
+    if max_val > 0:
+        normalized_points = centered_points / max_val
+    else:
+        normalized_points = centered_points
+        
+    return normalized_points
+
+def calculate_legibility_score(generated_path, canonical_path1, canonical_path2):
+    """
+    Calculates a legibility score for a generated ambigram path by comparing it
+    to the two source paths using the Hausdorff distance.
+    
+    A lower score is better.
+    """
+    if not generated_path or not canonical_path1 or not canonical_path2:
+        return float('inf') # Return a worst-case score for invalid paths
+
+    # --- 1. Create rotated version of the generated path ---
+    rotation = Transform().rotate(math.pi)
+    rotated_pen = SkiaPathPen()
+    generated_path.draw(TransformPen(rotated_pen, rotation))
+    generated_path_rotated = rotated_pen.path
+
+    # --- 2. Convert all paths to point clouds ---
+    points_gen_upright = convert_path_to_points(generated_path)
+    points_gen_rotated = convert_path_to_points(generated_path_rotated)
+    points_canon1 = convert_path_to_points(canonical_path1)
+    points_canon2 = convert_path_to_points(canonical_path2)
+
+    if any(p.size == 0 for p in [points_gen_upright, points_gen_rotated, points_canon1, points_canon2]):
+        return float('inf') # Cannot compare if any path is empty
+
+    # --- 3. Normalize all point clouds for fair comparison ---
+    norm_gen_upright = normalize_point_cloud(points_gen_upright)
+    norm_gen_rotated = normalize_point_cloud(points_gen_rotated)
+    norm_canon1 = normalize_point_cloud(points_canon1)
+    norm_canon2 = normalize_point_cloud(points_canon2)
+
+    # --- 4. Calculate the two-way Hausdorff distances ---
+    # The full Hausdorff distance is the max of the two directed distances.
+    # This measures how far P1 is from P2 and vice-versa.
+    d1_forward = directed_hausdorff(norm_gen_upright, norm_canon1)[0]
+    d1_backward = directed_hausdorff(norm_canon1, norm_gen_upright)[0]
+    d1 = max(d1_forward, d1_backward)
+
+    d2_forward = directed_hausdorff(norm_gen_rotated, norm_canon2)[0]
+    d2_backward = directed_hausdorff(norm_canon2, norm_gen_rotated)[0]
+    d2 = max(d2_forward, d2_backward)
+
+    # --- 5. Return the final RMS score ---
+    rms_score = np.sqrt((d1**2 + d2**2) / 2)
+    
+    return rms_score
 
 def align_using_centroid(path1_raw, path2_rotated, pair=""):
     """Aligns two paths by their geometric centroids and returns the union."""
@@ -542,6 +679,35 @@ def generate_using_half_letters(path1_raw, path2_rotated, pair=""):
     except Exception as e:
         print(f"  -> ERROR in half_letters strategy: {e}\n{traceback.format_exc()}")
         return None
+def save_path_as_svg(path_to_save, output_filename, glyph_set):
+    """Saves a SkiaPath object to a specified SVG file."""
+    if not path_to_save or not path_to_save.bounds:
+        print(f"  -> Warning: Path for {os.path.basename(output_filename)} is empty. Skipping save.")
+        return
+
+    bounds = path_to_save.bounds
+    padding = 50
+    left, top, right, bottom = bounds
+    width = right - left
+    height = bottom - top
+
+    svg_pen = SVGPathPen(glyph_set)
+    path_to_save.draw(svg_pen)
+    svg_path_data = svg_pen.getCommands()
+
+    if not svg_path_data:
+        print(f"  -> Warning: Could not get SVG command data for {os.path.basename(output_filename)}. Skipping save.")
+        return
+
+    viewbox_str = f"{left - padding} {top - padding} {width + padding*2} {height + padding*2}"
+    
+    dwg = svgwrite.Drawing(output_filename, profile='tiny', viewBox=viewbox_str)
+    # The transform corrects for SVG's coordinate system (y-down) vs. font coordinates (y-up)
+    g = dwg.g(transform=f"translate(0, {bottom + top}) scale(1, -1)")
+    g.add(dwg.path(d=svg_path_data, fill='black'))
+    dwg.add(g)
+    dwg.save()
+    print(f"  -> Saved to {output_filename}")
 
 def generate_ambigram_svg(font1, font2, pair, output_dir, strategy_func, uniform_glyphs=False, alignment_func=align_using_centroid):
     """Generates an ambigram SVG using a specified strategy function."""
@@ -578,7 +744,6 @@ def generate_ambigram_svg(font1, font2, pair, output_dir, strategy_func, uniform
     glyph_set2[glyph_name2].draw(pen2_raw)
     path2_raw = pen2_raw.path
 
-    # --- FIX: Conditional Uniform Scaling ---
     if uniform_glyphs:
         print("  -> Applying uniform scaling to source glyphs.")
         TARGET_HEIGHT = 1000.0  # Use float for precision, UPM is a good standard
@@ -617,6 +782,7 @@ def generate_ambigram_svg(font1, font2, pair, output_dir, strategy_func, uniform
 
     # --- Call Strategy with prepared paths ---
     merged_skia_path = strategy_func(path1_raw, path2_rotated, pair, alignment_func=alignment_func)
+    save_path_as_svg(merged_skia_path, output_filename, glyph_set1)
 
     if not merged_skia_path:
         print(f"  -> Warning: Strategy '{strategy_name}' failed for '{pair}'. Skipping.")
@@ -645,20 +811,17 @@ def generate_ambigram_svg(font1, font2, pair, output_dir, strategy_func, uniform
     dwg.save()
     print(f"  -> Saved to {output_filename}")
 
-def create_ambigram_from_string(word1, strategy_name, output_filename, word2=None, target_width=1200, uniform_glyphs=False, alignment_func=align_using_centroid):
+def create_ambigram_from_string(word1, strategy_name, output_filename, word2=None, target_width=1200, alignment_func=align_using_centroid, uniform_glyphs=False, winning_glyphs=None):
     """
     Creates a single composite ambigram image, scaled to a target width,
     with an option for uniform glyph rendering.
     """
     print(f"\n--- Composing ambigram for '{word1}' / '{word2 if word2 else word1}' ---")
     
-    align_name = alignment_func.__name__.replace('align_using_', '')
-    strategy_name = strategy_name.replace('align_using_', '').replace('generate_using_', '')
-    glyph_dir = os.path.join(".", f"generated_glyphs_{strategy_name}_{align_name}")
-    required_files = [f"{c1}{c2}.svg" for c1, c2 in zip(word1, word2)]
+    # --- STEP 1: Ensure this list contains ONLY character pairs (e.g., "an", "no") ---
+    required_pairs = [f"{c1}{c2}" for c1, c2 in zip(word1, word2)]
     glyph_images = []
 
-    # --- CONDITIONAL RENDERING LOGIC ---
     render_params = {}
     if uniform_glyphs:
         print("  -> Using uniform glyph height rendering.")
@@ -666,10 +829,26 @@ def create_ambigram_from_string(word1, strategy_name, output_filename, word2=Non
         render_params['output_height'] = GLYPH_RENDER_HEIGHT
     else:
         print("  -> Using variable (expressive) glyph height rendering.")
-        # render_params remains empty, so cairosvg will use the SVG's natural size
 
-    for filename in required_files:
+    # --- STEP 2: Loop through the character pairs ---
+    for pair in required_pairs:
+        # Dynamically determine the correct directory for each pair
+        if winning_glyphs:
+            # --select-best was used, so find the specific winner's directory
+            winning_alignment = winning_glyphs.get(pair)
+            if not winning_alignment:
+                print(f"  -> Fatal Error: Could not find a winning glyph for the pair '{pair}'. Aborting composition.")
+                return
+            # NOTE: Assumes the base strategy is 'outline' when using --select-best
+            glyph_dir = os.path.join(".", f"generated_glyphs_outline_{winning_alignment}")
+        else:
+            # Original behavior: use a single strategy directory
+            glyph_dir = os.path.join(".", f"generated_glyphs_{strategy_name}_{alignment_func.__name__.replace('align_using_','')}")
+        
+        # --- STEP 3: Construct the filename correctly, adding .svg only ONCE ---
+        filename = f"{pair}.svg"
         filepath = os.path.join(glyph_dir, filename)
+
         if not os.path.exists(filepath):
             print(f"  -> Warning: Required glyph file not found, skipping: {filepath}")
             continue
@@ -678,7 +857,7 @@ def create_ambigram_from_string(word1, strategy_name, output_filename, word2=Non
             png_data = svg2png(url=filepath, **render_params)
             glyph_image = Image.open(io.BytesIO(png_data))
             glyph_images.append(glyph_image)
-            print(f"  -> Loaded and rendered {filename}")
+            print(f"  -> Loaded and rendered {filename} from {os.path.basename(glyph_dir)}")
         except Exception as e:
             print(f"  -> ERROR: Could not process {filename}. Details: {e}")
 
@@ -707,6 +886,7 @@ def create_ambigram_from_string(word1, strategy_name, output_filename, word2=Non
 
     final_image.save(output_filename)
     print(f"\nAmbigram saved successfully to {output_filename}")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -750,6 +930,11 @@ if __name__ == "__main__":
         default="centroid",
         choices=['centroid', 'principal_axis', 'iterative_registration', 'c', 'i', 'p'],
         help="The alignment method to use for strategies that support it (e.g., 'outline')."
+    )
+    parser.add_argument(
+        "--select-best",
+        action='store_true',
+        help="Automatically test 'outline' with centroid and iterative alignments and select the one with the best legibility score."
     )
     parser.add_argument("-w", "--width", type=int, default=1200, help="The final width of the output PNG image in pixels. Defaults to 1200.")
     parser.add_argument("-u", "--uniform-glyphs", action='store_true', help="If included, renders all glyphs at a uniform height before composition.")
@@ -814,10 +999,68 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"WARNING: Could not load font2. Falling back to font1. Details: {e}")
 
+    winning_glyphs = {}
+
     for pair in pairs_to_generate:
         print(f"\n- Generating glyph for pair: '{pair}'")
-        generate_ambigram_svg(font1, font2, pair, ".", STRATEGY_TO_USE, alignment_func=ALIGNMENT_TO_USE, uniform_glyphs=UNIFORM_GLYPHS)
 
-    # double reverse string if "noambi"
+        if args.select_best:
+            # --- NEW WORKFLOW: Test and select the best glyph ---
+            print(f"  -> --select-best enabled: Finding optimal alignment for '{pair}'")
+
+            # 1. Get raw paths for the source characters
+            glyph_set1 = font1.getGlyphSet()
+            glyph_name1 = font1.getBestCmap().get(ord(pair[0]))
+            pen1_raw = SkiaPathPen(glyph_set1)
+            glyph_set1[glyph_name1].draw(pen1_raw)
+            path1_raw = pen1_raw.path
+            
+            glyph_set2 = font2.getGlyphSet()
+            glyph_name2 = font2.getBestCmap().get(ord(pair[1]))
+            pen2_raw = SkiaPathPen(glyph_set2)
+            glyph_set2[glyph_name2].draw(pen2_raw)
+            path2_raw = pen2_raw.path
+
+            # Rotate path2
+            pen2_rotated = SkiaPathPen(glyph_set2)
+            path2_raw.draw(TransformPen(pen2_rotated, Transform().rotate(math.pi)))
+            path2_rotated = pen2_rotated.path
+            
+            # 2. Test candidate 1: Outline with Centroid Alignment
+            print("  -> Testing candidate: outline + centroid")
+            path_centroid = generate_using_outline(path1_raw, path2_rotated, pair, alignment_func=align_using_centroid)
+            score_centroid = calculate_legibility_score(path_centroid, path1_raw, path2_raw)
+            print(f"  -> Score: {score_centroid:.4f}")
+
+            # 3. Test candidate 2: Outline with Iterative Registration
+            print("  -> Testing candidate: outline + iterative_registration")
+            path_iterative = generate_using_outline(path1_raw, path2_rotated, pair, alignment_func=align_using_iterative_registration)
+            score_iterative = calculate_legibility_score(path_iterative, path1_raw, path2_raw)
+            print(f"  -> Score: {score_iterative:.4f}")
+
+            # 4. Compare scores and select the winner
+            if score_iterative < score_centroid:
+                print("  -> Winner: Iterative Registration")
+                best_path = path_iterative
+                winning_align_name = "iterative_registration"
+            else:
+                print("  -> Winner: Centroid")
+                best_path = path_centroid
+                winning_align_name = "centroid"
+
+            winning_glyphs[pair] = winning_align_name
+
+            
+            # 5. Save the winning glyph to an appropriately named file
+            strategy_output_dir = os.path.join(".", f"generated_glyphs_outline_{winning_align_name}")
+            if not os.path.exists(strategy_output_dir):
+                os.makedirs(strategy_output_dir)
+            output_filename = os.path.join(strategy_output_dir, f"{pair}.svg")
+            save_path_as_svg(best_path, output_filename, glyph_set1)
+
+        else:
+            generate_ambigram_svg(font1, font2, pair, ".", STRATEGY_TO_USE, alignment_func=ALIGNMENT_TO_USE, uniform_glyphs=UNIFORM_GLYPHS)
+
+    # double reverse string if "noambi")
     output_filename = f"{INPUT_WORD}{'-' + INPUT_WORD2 if args.noambi else INPUT_WORD2[::-1]}_{os.path.basename(FONT1_FILE_PATH)}{'_uni' if UNIFORM_GLYPHS else ''}{'-' + os.path.basename(FONT2_FILE_PATH) if FONT2_FILE_PATH and font1 != font2 else ''}{'-' + args.alignment}_{'no' if args.noambi else ''}ambigram.png"
-    create_ambigram_from_string(INPUT_WORD, strategy_name, output_filename, word2=INPUT_WORD2, target_width=TARGET_WIDTH, uniform_glyphs=UNIFORM_GLYPHS, alignment_func=ALIGNMENT_TO_USE)
+    create_ambigram_from_string(INPUT_WORD, strategy_name, output_filename, word2=INPUT_WORD2, target_width=TARGET_WIDTH, uniform_glyphs=UNIFORM_GLYPHS, winning_glyphs=winning_glyphs, alignment_func=ALIGNMENT_TO_USE)
