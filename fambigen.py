@@ -818,7 +818,6 @@ def create_ambigram_from_string(word1, strategy_name, output_filename, word2=Non
     """
     print(f"\n--- Composing ambigram for '{word1}' / '{word2 if word2 else word1}' ---")
     
-    # --- STEP 1: Ensure this list contains ONLY character pairs (e.g., "an", "no") ---
     required_pairs = [f"{c1}{c2}" for c1, c2 in zip(word1, word2)]
     glyph_images = []
 
@@ -830,11 +829,8 @@ def create_ambigram_from_string(word1, strategy_name, output_filename, word2=Non
     else:
         print("  -> Using variable (expressive) glyph height rendering.")
 
-    # --- STEP 2: Loop through the character pairs ---
     for pair in required_pairs:
-        # Dynamically determine the correct directory for each pair
         if winning_glyphs:
-            # --select-best was used, so find the specific winner's directory
             winning_alignment = winning_glyphs.get(pair)
             if not winning_alignment:
                 print(f"  -> Fatal Error: Could not find a winning glyph for the pair '{pair}'. Aborting composition.")
@@ -842,10 +838,8 @@ def create_ambigram_from_string(word1, strategy_name, output_filename, word2=Non
             # NOTE: Assumes the base strategy is 'outline' when using --select-best
             glyph_dir = os.path.join(".", f"generated_glyphs_outline_{winning_alignment}")
         else:
-            # Original behavior: use a single strategy directory
             glyph_dir = os.path.join(".", f"generated_glyphs_{strategy_name}_{alignment_func.__name__.replace('align_using_','')}")
         
-        # --- STEP 3: Construct the filename correctly, adding .svg only ONCE ---
         filename = f"{pair}.svg"
         filepath = os.path.join(glyph_dir, filename)
 
@@ -853,7 +847,6 @@ def create_ambigram_from_string(word1, strategy_name, output_filename, word2=Non
             print(f"  -> Warning: Required glyph file not found, skipping: {filepath}")
             continue
         try:
-            # Use the ** operator to pass parameters to svg2png
             png_data = svg2png(url=filepath, **render_params)
             glyph_image = Image.open(io.BytesIO(png_data))
             glyph_images.append(glyph_image)
@@ -865,7 +858,6 @@ def create_ambigram_from_string(word1, strategy_name, output_filename, word2=Non
         print("Could not render any glyphs. Aborting composition.")
         return
 
-    # Composition logic is the same...
     total_width = sum(img.width for img in glyph_images)
     max_height = max(img.height for img in glyph_images)
     composite_image = Image.new('RGBA', (total_width, max_height), (255, 255, 255, 255))
@@ -876,7 +868,6 @@ def create_ambigram_from_string(word1, strategy_name, output_filename, word2=Non
         composite_image.paste(img, (current_x, y_pos), img)
         current_x += img.width
 
-    # Final resizing logic is also the same...
     current_width, current_height = composite_image.size
     aspect_ratio = float(current_height) / float(current_width)
     target_height = int(aspect_ratio * target_width)
