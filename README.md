@@ -56,18 +56,6 @@ New alignment strategy examples:
 `iterative_registration (shape overlap)`
 
 ![iterative registration](https://killsignal.net/deadbeef/GOD-GOD_arial.ttf-iterative_registration_ambigram.png)
-## Requirements
-
-This project uses several Python libraries for font manipulation, vector graphics, and image processing. A `requirements.txt` file is included, and you can install all dependencies using `pip`.
-
-The main libraries are:
-* `fonttools`
-* `skia-pathops`
-* `svgwrite`
-* `numpy`
-* `Pillow`
-* `scikit-image`
-* `cairosvg`
 
 ## Installation
 
@@ -138,16 +126,6 @@ The script operates in two main stages:
     * It reads the necessary SVG files in the correct order.
     * It uses the `cairosvg` library to render each SVG into an in-memory PNG image.
     * Finally, it uses the `Pillow` library to stitch these individual glyph images together side-by-side into a single composite PNG file.
-
-## Contributing
-
-It is a fair way from perfect so you issues, fixes, enhancements, etc are welcome! If you'd like to add a new strategy, improve an existing one, or add features, please feel free to:
-
-1.  Fork the repository.
-2.  Create a new branch for your feature.
-3.  Commit your changes.
-4.  Push to the branch 
-5.  Open a Pull Request.
 
 ## License
 
