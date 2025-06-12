@@ -234,6 +234,7 @@ def align_using_iterative_registration(path1_raw, path2_rotated, pair=""):
     union([path1_centered, pen2_final_aligned.path], result_pen)
     return result_pen.path
 
+
 def get_vector_skeleton(char, font):
     """
     Takes a single character and returns a clean, simplified, vector-based skeleton path.
@@ -747,12 +748,12 @@ if __name__ == "__main__":
         "-a", "--alignment",
         type=str,
         default="centroid",
-        choices=['centroid', 'principal_axis', 'iterative_registration'],
+        choices=['centroid', 'principal_axis', 'iterative_registration', 'c', 'i', 'p'],
         help="The alignment method to use for strategies that support it (e.g., 'outline')."
     )
     parser.add_argument("-w", "--width", type=int, default=1200, help="The final width of the output PNG image in pixels. Defaults to 1200.")
-    parser.add_argument("--uniform-glyphs", action='store_true', help="If included, renders all glyphs at a uniform height before composition.")
-    parser.add_argument("--noambi", action='store_true', help="Only run the font strategies - do not ambigrammatize. Equivalent to passing word1 in reverse, negating the ambigram effect.")
+    parser.add_argument("-u", "--uniform-glyphs", action='store_true', help="If included, renders all glyphs at a uniform height before composition.")
+    parser.add_argument("-n", "--noambi", action='store_true', help="Only run the font strategies - do not ambigrammatize. Equivalent to passing word1 in reverse, negating the ambigram effect.")
      
     args = parser.parse_args()
 
@@ -776,11 +777,11 @@ if __name__ == "__main__":
     STRATEGY_TO_USE = strategy_map[args.strategy]
 
     alignment_map = {
-        'centroid': align_using_centroid,
-        'principal_axis': align_using_principal_axis,
-        'iterative_registration': align_using_iterative_registration,
+        'c': align_using_centroid,
+        'p': align_using_principal_axis,
+        'i': align_using_iterative_registration,
     }
-    ALIGNMENT_TO_USE = alignment_map[args.alignment]
+    ALIGNMENT_TO_USE = alignment_map[args.alignment[0]]
 
     if INPUT_WORD2 and len(INPUT_WORD) != len(INPUT_WORD2):
         print(f"ERROR: Input words '{INPUT_WORD}' and '{INPUT_WORD2}' must be the same length.")
@@ -817,5 +818,6 @@ if __name__ == "__main__":
         print(f"\n- Generating glyph for pair: '{pair}'")
         generate_ambigram_svg(font1, font2, pair, ".", STRATEGY_TO_USE, alignment_func=ALIGNMENT_TO_USE, uniform_glyphs=UNIFORM_GLYPHS)
 
-    output_filename = f"{INPUT_WORD}{'-' + (INPUT_WORD2 if args.noambi else INPUT_WORD2[::-1] if INPUT_WORD2 else '')}_{os.path.basename(FONT1_FILE_PATH)}{'_uni' if UNIFORM_GLYPHS else ''}{'-' + os.path.basename(FONT2_FILE_PATH) if FONT2_FILE_PATH and font1 != font2 else ''}{'-' + args.alignment}_{'no' if args.noambi else ''}ambigram.png"
+    # double reverse string if "noambi"
+    output_filename = f"{INPUT_WORD}{'-' + INPUT_WORD2 if args.noambi else INPUT_WORD2[::-1]}_{os.path.basename(FONT1_FILE_PATH)}{'_uni' if UNIFORM_GLYPHS else ''}{'-' + os.path.basename(FONT2_FILE_PATH) if FONT2_FILE_PATH and font1 != font2 else ''}{'-' + args.alignment}_{'no' if args.noambi else ''}ambigram.png"
     create_ambigram_from_string(INPUT_WORD, strategy_name, output_filename, word2=INPUT_WORD2, target_width=TARGET_WIDTH, uniform_glyphs=UNIFORM_GLYPHS, alignment_func=ALIGNMENT_TO_USE)

@@ -1,0 +1,43 @@
+flowchart TD
+    A[Start: Command Line Input] --> B[Load Font Files]
+    B --> C[Generate Character Pairs]
+    C --> D[For Each Character Pair]
+    
+    D --> E[Extract Glyph Paths]
+    E --> F{Uniform Glyphs?}
+    F -->|Yes| G[Scale to Uniform Height]
+    F -->|No| H[Keep Original Scale]
+    G --> I[Rotate Second Path 180°]
+    H --> I
+    
+    I --> J{Alignment Method}
+    J -->|Centroid| K[Calculate Centroids]
+    J -->|Iterative| L[Iterative Registration Search]
+    
+    K --> M[Translate Paths to Origin]
+    L --> N[Find Best Overlap Position]
+    N --> O[Apply Best Transform]
+    
+    M --> P[Union Aligned Paths]
+    O --> P
+    P --> Q[Scale Down by 0.88]
+    Q --> R[XOR: Original - Scaled = Outline]
+    R --> S[Save SVG Glyph]
+    
+    S --> T{More Pairs?}
+    T -->|Yes| D
+    T -->|No| U[Load All Generated SVGs]
+    
+    U --> V{Uniform Rendering?}
+    V -->|Yes| W[Render at Fixed Height]
+    V -->|No| X[Render at Natural Size]
+    W --> Y[Compose Horizontal Layout]
+    X --> Y
+    Y --> Z[Resize to Target Width]
+    Z --> AA[Save Final PNG]
+    
+    style A fill:#e1f5fe
+    style AA fill:#c8e6c9
+    style J fill:#fff3e0
+    style K fill:#f3e5f5
+    style L fill:#ffe0e6

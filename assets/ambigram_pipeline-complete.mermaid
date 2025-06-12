@@ -1,0 +1,71 @@
+flowchart TD
+    A[Start: Command Line Input] --> B{Parse Arguments}
+    B --> C[Load Font Files]
+    C --> D{Font Loading Success?}
+    D -->|No| E[Exit with Error]
+    D -->|Yes| F[Generate Character Pairs]
+    
+    F --> G[For Each Character Pair]
+    G --> H[Extract Glyph Paths]
+    H --> I{Uniform Glyphs Option?}
+    I -->|Yes| J[Scale to Uniform Height]
+    I -->|No| K[Keep Original Scale]
+    J --> L[Rotate Second Path 180°]
+    K --> L
+    
+    L --> M{Select Strategy}
+    
+    M -->|Outline| N[Outline Strategy]
+    M -->|Centerline Trace| O[Centerline Trace Strategy]
+    M -->|Half Letters| P[Half Letters Strategy]
+    
+    N --> N1{Select Alignment Method}
+    N1 -->|Centroid| N2[Align by Centroid]
+    N1 -->|Principal Axis| N3[Align by Principal Axis]
+    N1 -->|Iterative| N4[Iterative Registration]
+    
+    N2 --> N5[Union Aligned Paths]
+    N3 --> N5
+    N4 --> N5
+    N5 --> N6[Scale Down by 0.88]
+    N6 --> N7[XOR: Original - Scaled = Outline]
+    N7 --> Q[Generate SVG Path]
+    
+    O --> O1[Extract Vector Skeletons]
+    O1 --> O2[Align Skeleton Centroids]
+    O2 --> O3[Union Skeletons]
+    O3 --> O4[Rasterize to Bitmap]
+    O4 --> O5[Apply Chisel Dilation]
+    O5 --> O6[Find Contours]
+    O6 --> O7[Convert Back to Vector]
+    O7 --> Q
+    
+    P --> P1[Clip Top Half of Each Glyph]
+    P1 --> P2[Calculate Full Path Alignment]
+    P2 --> P3[Apply Alignment to Clipped Halves]
+    P3 --> P4[Union Aligned Halves]
+    P4 --> P5[Apply Outline Effect]
+    P5 --> Q
+    
+    Q --> R[Save Individual SVG Glyph]
+    R --> S{More Pairs?}
+    S -->|Yes| G
+    S -->|No| T[Composite Image Creation]
+    
+    T --> U[Load Generated SVG Files]
+    U --> V{Uniform Rendering?}
+    V -->|Yes| W[Render at Fixed Height]
+    V -->|No| X[Render at Natural Size]
+    W --> Y[Compose Horizontal Layout]
+    X --> Y
+    Y --> Z[Resize to Target Width]
+    Z --> AA[Save Final PNG]
+    AA --> BB[End]
+    
+    style A fill:#e1f5fe
+    style BB fill:#c8e6c9
+    style E fill:#ffcdd2
+    style M fill:#fff3e0
+    style N fill:#f3e5f5
+    style O fill:#e8f5e8
+    style P fill:#fce4ec
