@@ -1,4 +1,4 @@
-# fambigen - the Ambigram Generator
+# fambigen - Ambigram Generator (and font compositor)
 
 ![Python](https://img.shields.io/badge/python-3.x-blue.svg)
 
@@ -129,3 +129,4 @@ The script operates in two main stages:
 ## License
 
 This project is licensed under the MIT Licenset push
+
