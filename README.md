@@ -17,8 +17,23 @@ In `--noambi` mode, `fambigen` does three things:
 2. Generates a composite SVG for each unique pair using the selected strategy/alignment.
 3. Renders those per-pair SVGs to PNG and stitches them into one final image.
 
-This is best thought of as a *procedural compositor / renderer*, not a tool that emits an installable `.ttf/.otf`.
+This is best thought of as a *procedural compositor / renderer*, ~~not a tool that emits an installable `.ttf/.otf`~~.
+ (It now, totally does output installable font files given two source fonts as input arguments. Keep reading. In the meantime, here's an example of the first successfully generated font, installed and in use on a MacBook Air:
 
+```bash
+python fambigen.py "" \
+  --emit-font AriTimes.ttf \
+  --charset ascii \
+  --font Arial \
+  --font2 "Times New Roman"
+```
+
+And the example after installing it via MacOS Font Book:
+
+![Arial + Times New Roman](https://)
+
+
+ 
 ### New switches (related to generating FONT files, not Ambigram Images, though of course the tool still makes Ambigram PNGs as originally.)
 
 - `--emit-font OUT.ttf|OUT.woff|OUT.woff2`
@@ -73,7 +88,7 @@ python fambigen.py "GOLGOTHIKA" \
   --strategy outline \
   --alignment centroid \
   --font "/path/to/fontA.ttf"
-
+```
 
 **About fambigen** 
 This script takes one or two input words (or phrases), generates the necessary rotationally symmetric glyphs for each character pair, and composes them into a single PNG image.
@@ -249,4 +264,6 @@ The script operates in two main stages:
 ## License
 
 This project is licensed under the MIT Licenset push
+
+
 
