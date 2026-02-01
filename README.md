@@ -73,7 +73,7 @@ python fambigen.py "GOLGOTHIKA" \
   --strategy outline \
   --alignment centroid \
   --font "/path/to/fontA.ttf"
-
+```
 
 **About fambigen** 
 This script takes one or two input words (or phrases), generates the necessary rotationally symmetric glyphs for each character pair, and composes them into a single PNG image.
@@ -249,4 +249,5 @@ The script operates in two main stages:
 ## License
 
 This project is licensed under the MIT Licenset push
+
 
