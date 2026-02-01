@@ -105,13 +105,13 @@ I searched a bit online and was surprised to find that this seemed mostly true, 
 
 ## Features
 
-* **Multiple Generation Strategies**: Implements four distinct strategies for creating ambigram glyphs:
+* **Multiple Generation Strategies**: Implements distinct strategies for creating ambigram glyphs:
     * `outline`: A purely vector-based method that creates an outline/inline effect.
     * `centerline_trace`: A complex method that generates a centerline skeleton for each character, aligns them, and applies a calligraphic stroke.
 * **Multiple Alignment Strategies**: 
     * `centroid`: A simple union based on aligning the geometric centers.
     * `iterative_registration`: Shape overlap maximization.
-[    * `principal_axis`: A more stable alignment based on the principal axis of the character shapes.]: #
+    * `principal_axis`: A more stable alignment based on the principal axis of the character shapes.
 * **Flexible Ambigram Creation**:
     * Create palindromic ambigrams from a single word (e.g., "level").
     * Create a simple ambigram of a non-palidromic single word that will read the same "upside-down".
@@ -255,6 +255,7 @@ The script operates in two main stages:
 ## License
 
 This project is licensed under the MIT License
+
 
 
 
