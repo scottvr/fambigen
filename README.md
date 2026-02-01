@@ -18,7 +18,10 @@ In `--noambi` mode, `fambigen` does three things:
 3. Renders those per-pair SVGs to PNG and stitches them into one final image.
 
 This is best thought of as a *procedural compositor / renderer*, ~~not a tool that emits an installable `.ttf/.otf`~~.
- (It now, totally does output installable font files given two source fonts as input arguments. Keep reading. In the meantime, here's an example of the first successfully generated font, installed and in use on a MacBook Air:
+
+## (It now totally does output installable font files
+given two source fonts as input arguments.) Keep reading for usage details. 
+In the meantime, here's an example of the first successfully generated font, installed and in use on a MacBook Air:
 
 ```bash
 python fambigen.py "" \
@@ -264,6 +267,7 @@ The script operates in two main stages:
 ## License
 
 This project is licensed under the MIT Licenset push
+
 
 
 
