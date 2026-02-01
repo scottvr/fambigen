@@ -93,7 +93,7 @@ python fambigen.py "GOLGOTHIKA" \
   --font "/path/to/fontA.ttf"
 ```
 
-**About fambigen** 
+## About fambigen
 This script takes one or two input words (or phrases), generates the necessary rotationally symmetric glyphs for each character pair, and composes them into a single PNG image.
 
 I had cobbled together something similar in perl using a static ambigram font that you could enter text via your 1990's web browser, submit the form, and get back an ambigram - even of two same length sentences. It was a lot like the dime a dozen copycat ambigram generator websites you see today, just it was CGI on Apache 1.x. :-) Anyway, I had read something recently about how creating ambigrams (or at least, an ambigram font) is something "nearly impossible" by computer alone, and that the exceptions to the dime-a-dozen sites/services out there still had a human-in-the-middle as part of their process. 
@@ -229,9 +229,9 @@ Important:
 When using --emit-font, the positional word1 argument is ignored unless
 you explicitly pass `--charset input`.
 
-`--charset input` → emit a subset font containing only the glyphs that appear in word1
+`--charset input` emit a subset font containing only the glyphs that appear in word1
 
-`--charset [ascii|latin1]` → emit a general-purpose font; word1 is just a placeholder
+`--charset [ascii|latin1]` emit a general-purpose font; word1 is just a placeholder
 
 ```
 # Subset font: only glyphs appearing in the string "ARIAL&TIMES"
@@ -267,6 +267,7 @@ The script operates in two main stages:
 ## License
 
 This project is licensed under the MIT License
+
 
 
 
