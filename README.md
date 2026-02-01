@@ -30,7 +30,7 @@ python fambigen.py "" \
 
 And the example after installing it via MacOS Font Book:
 
-![Arial + Times New Roman](https://)
+![Arial + Times New Roman](https://github.com/scottvr/fambigen/blob/c0f2f13f71de0d930c4b2570f022409f4fbf854d/assets/AriTimes1..2..3.png)
 
 
  
@@ -264,6 +264,7 @@ The script operates in two main stages:
 ## License
 
 This project is licensed under the MIT Licenset push
+
 
 
 
