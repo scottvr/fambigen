@@ -10,7 +10,6 @@ import os
 import io
 import numpy as np
 import traceback
-import string
 import argparse
 from PIL import Image, ImageDraw
 from skimage.morphology import skeletonize, binary_opening, binary_closing, binary_dilation
@@ -26,8 +25,79 @@ from pathops import Path as SkiaPath, union, difference, xor, intersection
 from scipy.ndimage import rotate
 from scipy.spatial.distance import directed_hausdorff
 from cairosvg import svg2png
+from fontTools.pens.ttGlyphPen import TTGlyphPen
+from fontTools.ttLib.tables._c_m_a_p import CmapSubtable
+from matplotlib import font_manager
 
 #import faulthandler
+
+def resolve_font_path(font_arg: str) -> str:
+    if not font_arg:
+        raise FileNotFoundError("Empty font argument")
+
+    if os.path.isfile(font_arg):
+        return os.path.abspath(font_arg)
+
+    target = font_arg.strip().lower()
+    target_base, target_ext = os.path.splitext(target)
+
+    font_paths = set()
+    for ext in ("ttf", "otf", "ttc"):
+        for p in font_manager.findSystemFonts(fontpaths=None, fontext=ext):
+            font_paths.add(p)
+
+    # Fast pass: filename match
+    filename_hits = set()
+    for p in font_paths:
+        fn = os.path.basename(p).lower()
+        base, ext = os.path.splitext(fn)
+
+        if fn == target:
+            filename_hits.add(p)
+        elif target_ext == "" and base == target:
+            filename_hits.add(p)
+        elif target_ext != "" and base == target_base and ext == target_ext:
+            filename_hits.add(p)
+
+    if filename_hits:
+        hits = sorted(filename_hits)
+    else:
+        # Slow pass: family match (dedupe)
+        family_hits = set()
+        for p in font_paths:
+            try:
+                tt = TTFont(p, lazy=True)
+                if "name" not in tt:
+                    continue
+                for rec in tt["name"].names:
+                    if rec.nameID == 1:  # Family
+                        fam = rec.toUnicode().strip().lower()
+                        if fam == target:
+                            family_hits.add(p)
+                            break
+            except Exception:
+                continue
+        hits = sorted(family_hits)
+
+    if not hits:
+        raise FileNotFoundError(
+            f"Could not resolve font '{font_arg}'. "
+            "Pass an explicit path or choose an installed font."
+        )
+
+    if len(hits) == 1:
+        return hits[0]
+
+    # Prefer Regular if unique
+    regularish = [p for p in hits if "regular" in os.path.basename(p).lower()]
+    if len(regularish) == 1:
+        return regularish[0]
+
+    preview = "\n".join(hits[:30])
+    more = "" if len(hits) <= 30 else f"\n... ({len(hits) - 30} more)"
+    raise FileNotFoundError(
+        f"Font '{font_arg}' is ambiguous. Matches:\n{preview}{more}"
+    )
 
 class SkiaPathPen(BasePen):
     """A pen to convert glyph outlines into a skia-pathops Path object."""
@@ -109,6 +179,125 @@ def convert_path_to_points(path, num_points=150):
             interp_pts[i] = pts[segment_index]
 
     return interp_pts
+
+def _dist(a, b):
+    dx = b[0] - a[0]
+    dy = b[1] - a[1]
+    return math.sqrt(dx*dx + dy*dy)
+
+def _quad_point(p0, p1, p2, t):
+    # Quadratic Bezier point
+    x = (1-t)*(1-t)*p0[0] + 2*(1-t)*t*p1[0] + t*t*p2[0]
+    y = (1-t)*(1-t)*p0[1] + 2*(1-t)*t*p1[1] + t*t*p2[1]
+    return (x, y)
+
+def _cubic_point(p0, p1, p2, p3, t):
+    # Cubic Bezier point
+    u = 1 - t
+    x = (u*u*u)*p0[0] + 3*(u*u)*t*p1[0] + 3*u*(t*t)*p2[0] + (t*t*t)*p3[0]
+    y = (u*u*u)*p0[1] + 3*(u*u)*t*p1[1] + 3*u*(t*t)*p2[1] + (t*t*t)*p3[1]
+    return (x, y)
+
+def _segments_for_curve(p0, pN, approx_len, min_segs=4, max_segs=48):
+    # Heuristic: more segments for longer curves.
+    # approx_len is in font units, typical UPM ~ 1000 or 2048.
+    segs = int(max(min_segs, min(max_segs, approx_len / 40.0)))
+    return segs
+
+def skia_path_to_ttglyph(flat_path, glyph_name_for_debug=".notdef"):
+    """
+    Convert a skia-pathops Path (iterable verbs) into a TrueType glyph by
+    flattening curves into line segments.
+
+    Output: a fontTools glyf glyph object (simple glyph).
+    """
+    pen = TTGlyphPen(None)
+
+    if not flat_path or not flat_path.bounds:
+        # Empty glyph
+        return pen.glyph()
+
+    current = None
+    start = None
+    have_contour = False
+
+    for verb, pts in flat_path:
+        # pts is typically a tuple/list of points; your code treats it similarly.
+        if verb == "moveTo":
+            # Close prior contour if it was left open
+            if have_contour:
+                pen.closePath()
+                have_contour = False
+
+            p = pts[0]
+            current = (float(p[0]), float(p[1]))
+            start = current
+            pen.moveTo(current)
+            have_contour = True
+
+        elif verb == "lineTo":
+            p = pts[0]
+            nxt = (float(p[0]), float(p[1]))
+            if current is None:
+                # Defensive: start a contour
+                pen.moveTo(nxt)
+                start = nxt
+                have_contour = True
+            else:
+                pen.lineTo(nxt)
+            current = nxt
+
+        elif verb == "qCurveTo":
+            # Quadratic: pts has control and end in your pen implementation
+            # Your SkiaPathPen._qCurveToOne(p1, p2) uses quadTo(p1, p2),
+            # so pts likely includes 2 points: control, end.
+            if current is None:
+                continue
+            if len(pts) < 2:
+                continue
+            c = (float(pts[0][0]), float(pts[0][1]))
+            e = (float(pts[1][0]), float(pts[1][1]))
+
+            approx_len = _dist(current, c) + _dist(c, e)
+            segs = _segments_for_curve(current, e, approx_len)
+            for i in range(1, segs+1):
+                t = i / float(segs)
+                p = _quad_point(current, c, e, t)
+                pen.lineTo((float(p[0]), float(p[1])))
+            current = e
+
+        elif verb == "curveTo":
+            # Cubic: pts likely includes 3 points: c1, c2, end
+            if current is None:
+                continue
+            if len(pts) < 3:
+                continue
+            c1 = (float(pts[0][0]), float(pts[0][1]))
+            c2 = (float(pts[1][0]), float(pts[1][1]))
+            e = (float(pts[2][0]), float(pts[2][1]))
+
+            approx_len = _dist(current, c1) + _dist(c1, c2) + _dist(c2, e)
+            segs = _segments_for_curve(current, e, approx_len)
+            for i in range(1, segs+1):
+                t = i / float(segs)
+                p = _cubic_point(current, c1, c2, e, t)
+                pen.lineTo((float(p[0]), float(p[1])))
+            current = e
+
+        elif verb == "closePath":
+            if have_contour:
+                pen.closePath()
+                have_contour = False
+            current = start
+
+        else:
+            # Unknown verb; ignore
+            pass
+
+    if have_contour:
+        pen.closePath()
+
+    return pen.glyph()
 
 def normalize_point_cloud(points):
     """Translates and scales a point cloud for consistent comparison."""
@@ -834,6 +1023,355 @@ def create_ambigram_from_string(word1, strategy_name, output_filename, word2=Non
     final_image.save(output_filename)
     print(f"\nAmbigram saved successfully to {output_filename}")
 
+def emit_composite_font(
+    out_path,
+    font1,
+    font2,
+    charset_codepoints,
+    strategy_func,
+    alignment_func,
+    uniform_glyphs=False,
+    width_mode="max",
+    family_name=None,
+):
+    """
+    Emit a subset TrueType/WOFF font consisting of composite glyphs:
+      out_glyph(c) = merge( glyph1(c), glyph2(c) )
+
+    No ambigram rotation is performed. This is compositing only.
+    """
+
+    # Start from font1 as a template. This preserves a lot of tables that
+    # make the font installable, and we replace cmap/glyf/hmtx appropriately.
+    out = TTFont()  # build a fresh font for clarity
+
+    # Copy required tables from font1 when present
+    for tag in ["head", "hhea", "maxp", "OS/2", "post", "name", "loca"]:
+        if tag in font1:
+            out[tag] = font1[tag]
+
+    # glyf/hmtx/cmap will be rebuilt
+    out["glyf"] = font1["glyf"] if "glyf" in font1 else None
+    out["hmtx"] = font1["hmtx"] if "hmtx" in font1 else None
+
+    glyph_set1 = font1.getGlyphSet()
+    glyph_set2 = font2.getGlyphSet()
+
+    cmap1 = font1.getBestCmap()
+    cmap2 = font2.getBestCmap()
+
+    # Always include .notdef as first glyph
+    glyph_order = [".notdef"]
+    glyf_table = out["glyf"]
+    hmtx_table = out["hmtx"]
+
+    # Build new glyph objects and metrics
+    new_glyf = {}
+    new_hmtx = {}
+
+    # Create an empty .notdef (or reuse if it exists in font1)
+    if ".notdef" in getattr(font1, "getGlyphOrder", lambda: [])():
+        try:
+            new_glyf[".notdef"] = font1["glyf"][".notdef"]
+            new_hmtx[".notdef"] = font1["hmtx"][".notdef"]
+        except Exception:
+            pen = TTGlyphPen(None)
+            new_glyf[".notdef"] = pen.glyph()
+            new_hmtx[".notdef"] = (500, 0)
+    else:
+        pen = TTGlyphPen(None)
+        new_glyf[".notdef"] = pen.glyph()
+        new_hmtx[".notdef"] = (500, 0)
+
+    # Helper: uniform scaling copied from your generate_ambigram_svg() logic
+    def _apply_uniform_scale(path):
+        if not path or not path.bounds:
+            return path
+        TARGET_HEIGHT = 1000.0
+        b = path.bounds
+        h = b[3] - b[1]
+        if h <= 0:
+            return path
+        scale_factor = TARGET_HEIGHT / float(h)
+        t = Transform().scale(scale_factor)
+        p = SkiaPathPen()
+        path.draw(TransformPen(p, t))
+        return p.path
+
+    def _advance_width_for(cp, gname1, gname2, merged_path):
+        # Default LSB = 0 for now (crude but acceptable v1)
+        adv1 = None
+        adv2 = None
+        try:
+            adv1 = font1["hmtx"][gname1][0]
+        except Exception:
+            pass
+        try:
+            adv2 = font2["hmtx"][gname2][0]
+        except Exception:
+            pass
+
+        if width_mode == "font1":
+            adv = adv1 if adv1 is not None else (adv2 if adv2 is not None else 600)
+            return (int(adv), 0)
+
+        if width_mode == "max":
+            candidates = [a for a in [adv1, adv2] if a is not None]
+            adv = max(candidates) if candidates else 600
+            return (int(adv), 0)
+
+        if width_mode == "auto":
+            # Compute from merged bounds. Add padding.
+            if merged_path and merged_path.bounds:
+                b = merged_path.bounds
+                w = b[2] - b[0]
+                pad = max(20.0, w * 0.10)
+                adv = int(max(200.0, w + pad))
+                return (adv, 0)
+            return (600, 0)
+
+        # fallback
+        return (600, 0)
+
+    # Generate composite glyphs
+    for cp in charset_codepoints:
+        gname1 = cmap1.get(cp)
+        if not gname1:
+            continue  # skip chars font1 doesn't support
+        gname2 = cmap2.get(cp) or gname1
+
+        # Extract outlines into SkiaPath
+        try:
+            pen1 = SkiaPathPen(glyph_set1)
+            glyph_set1[gname1].draw(pen1)
+            path1_raw = pen1.path
+
+            pen2 = SkiaPathPen(glyph_set2)
+            glyph_set2[gname2].draw(pen2)
+            path2_raw = pen2.path
+        except Exception:
+            continue
+
+        if not path1_raw or not path1_raw.bounds:
+            continue
+
+        if uniform_glyphs:
+            path1_raw = _apply_uniform_scale(path1_raw)
+            path2_raw = _apply_uniform_scale(path2_raw)
+
+        # NO ROTATION. compositing only.
+        pair = chr(cp) + chr(cp)
+
+        # For emission, restrict to outline strategy unless you want to harden others.
+        try:
+            merged = _call_strategy(strategy_func, path1_raw, path2_raw, pair, alignment_func)
+        except TypeError:
+            # Strategy function signature mismatch; skip.
+            continue
+        except Exception:
+            continue
+
+        if not merged or not merged.bounds:
+            continue
+
+        # Convert merged SkiaPath to a TrueType glyph (flattened)
+        ttglyph = skia_path_to_ttglyph(merged, glyph_name_for_debug=gname1)
+
+        # Use original glyph name from font1 to keep cmap mapping simple
+        out_gname = gname1
+        new_glyf[out_gname] = ttglyph
+        new_hmtx[out_gname] = _advance_width_for(cp, gname1, gname2, merged)
+
+        if out_gname not in glyph_order:
+            glyph_order.append(out_gname)
+
+    # Build glyf + hmtx tables
+    # Replace the template table contents with our subset
+    out.setGlyphOrder(glyph_order)
+
+    # Ensure glyf/hmtx exist
+    if "glyf" not in out:
+        out["glyf"] = font1["glyf"]
+    if "hmtx" not in out:
+        out["hmtx"] = font1["hmtx"]
+
+    # Write glyf data
+    out["glyf"].glyphs = {}
+    for g in glyph_order:
+        out["glyf"].glyphs[g] = new_glyf.get(g, TTGlyphPen(None).glyph())
+
+    # Write hmtx metrics
+    out["hmtx"].metrics = {}
+    for g in glyph_order:
+        out["hmtx"].metrics[g] = new_hmtx.get(g, (600, 0))
+
+    # Recalc bounds for each glyph
+    try:
+        for g in glyph_order:
+            out["glyf"][g].recalcBounds(out["glyf"])
+    except Exception:
+        pass
+
+    # Build a minimal cmap (format 4, BMP only)
+    cmap_table = out.get("cmap", None)
+    if cmap_table is None:
+        out["cmap"] = font1["cmap"]
+        cmap_table = out["cmap"]
+
+    sub = CmapSubtable.newSubtable(4)
+    sub.platformID = 3
+    sub.platEncID = 1
+    sub.language = 0
+    sub.cmap = {}
+
+    for cp in charset_codepoints:
+        if cp > 0xFFFF:
+            continue
+        gname = cmap1.get(cp)
+        if not gname:
+            continue
+        if gname in new_glyf:
+            sub.cmap[cp] = gname
+
+    cmap_table.tables = [sub]
+
+    # Update maxp / hhea counts
+    if "maxp" in out:
+        out["maxp"].numGlyphs = len(glyph_order)
+    if "hhea" in out:
+        out["hhea"].numberOfHMetrics = len(glyph_order)
+
+    # Update name table (optional)
+    if family_name and "name" in out:
+        # Very light-touch: set family name (nameID 1) and full name (nameID 4)
+        # across existing records where applicable.
+        for rec in out["name"].names:
+            try:
+                if rec.nameID == 1:
+                    rec.string = family_name.encode(rec.getEncoding(), errors="replace")
+                if rec.nameID == 4:
+                    rec.string = (family_name + " Regular").encode(rec.getEncoding(), errors="replace")
+            except Exception:
+                pass
+
+    def set_output_format_from_extension(ttfont_obj, out_path):
+        ext = os.path.splitext(out_path)[1].lower()
+    
+        if ext == ".ttf":
+            ttfont_obj.flavor = None
+            # TrueType outlines (glyf) already.
+            return
+    
+        if ext == ".woff":
+            ttfont_obj.flavor = "woff"
+            return
+    
+        if ext == ".woff2":
+            ttfont_obj.flavor = "woff2"
+            return
+    
+        if ext == ".otf":
+            raise ValueError(
+                "OTF output not yet supported.\n"
+                "This generator builds TrueType (glyf) outlines; real .otf usually requires CFF conversion. "
+                "Use .ttf/.woff/.woff2."
+            )
+    
+        raise ValueError(f"Unknown output extension '{ext}'. Use .ttf/.woff/.woff2.")
+
+    # Save
+    set_output_format_from_extension(out, out_path)
+    set_font_metadata(out, family_name or"fambigen", style="Regular", version="1.000", vendor="FMBG")
+
+    out.save(out_path)
+    print(f"Saved composite font to: {out_path}")
+
+def set_font_metadata(tt, family, style="Regular", version="1.000", vendor="FMBG"):
+    """
+    Rewrite name table + a couple identifiers so the emitted font does not
+    collide with the source font (e.g. Arial).
+    """
+
+    # PostScript name rules: no spaces, typically ASCII
+    ps_family = "".join(ch for ch in family if ch.isalnum() or ch in "-_")
+    ps_style  = "".join(ch for ch in style  if ch.isalnum() or ch in "-_")
+    ps_name = f"{ps_family}-{ps_style}" if ps_style else ps_family
+
+    full_name = f"{family} {style}".strip()
+    version_str = f"Version {version}"
+
+    # Make a unique ID that changes per build (simple deterministic option):
+    # include family/style/version + vendor. You can also add a timestamp if you want.
+    unique_id = f"{vendor};{family};{style};{version}"
+
+    if "name" not in tt:
+        # If you built from scratch and forgot name table, copy from a template or create.
+        raise RuntimeError("Output font has no 'name' table to edit.")
+
+    name_table = tt["name"]
+
+    replacements = {
+        1: family,
+        2: style,
+        3: unique_id,
+        4: full_name,
+        5: version_str,
+        6: ps_name,
+        16: family,
+        17: style,
+    }
+
+    # Overwrite existing records for these IDs across all platforms/encodings
+    for rec in name_table.names:
+        if rec.nameID in replacements:
+            try:
+                rec.string = replacements[rec.nameID].encode(rec.getEncoding(), errors="replace")
+            except Exception:
+                # As a fallback, write UTF-16BE for Windows records
+                rec.string = replacements[rec.nameID].encode("utf-16be", errors="replace")
+
+    # Ensure missing required records exist (some fonts won't have 16/17 for example)
+    existing = {(rec.nameID, rec.platformID, rec.platEncID, rec.langID) for rec in name_table.names}
+
+    # Add at least Windows Unicode BMP (platform 3, enc 1, lang 0x0409) and Mac Roman (platform 1, enc 0, lang 0)
+    add_targets = [
+        (3, 1, 0x0409),  # Windows, Unicode BMP, en-US
+        (1, 0, 0),       # Mac, Roman, English
+    ]
+
+    for name_id, text in replacements.items():
+        for platformID, platEncID, langID in add_targets:
+            key = (name_id, platformID, platEncID, langID)
+            if key in existing:
+                continue
+            try:
+                name_table.setName(text, name_id, platformID, platEncID, langID)
+            except Exception:
+                pass
+
+    # Vendor ID
+    if "OS/2" in tt:
+        vend = (vendor[:4].ljust(4, " ")).encode("ascii", errors="replace")
+        try:
+            tt["OS/2"].achVendID = vend
+        except Exception:
+            pass
+
+    # Revision
+    if "head" in tt:
+        try:
+            tt["head"].fontRevision = float(version)
+        except Exception:
+            pass
+
+def _call_strategy(strategy_func, path1, path2, pair, alignment_func):
+    # Some strategies take alignment_func, others do not.
+    try:
+        return strategy_func(path1, path2, pair, alignment_func=alignment_func)
+    except TypeError:
+        # Fallback for strategies that don't accept alignment_func
+        return strategy_func(path1, path2, pair)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -886,13 +1424,54 @@ if __name__ == "__main__":
     parser.add_argument("-w", "--width", type=int, default=1200, help="The final width of the output PNG image in pixels. Defaults to 1200.")
     parser.add_argument("-u", "--uniform-glyphs", action='store_true', help="If included, renders all glyphs at a uniform height before composition.")
     parser.add_argument("-n", "--noambi", action='store_true', help="Only run the font strategies - do not ambigrammatize. Equivalent to passing word1 in reverse, negating the ambigram effect.")
-     
+    
+    parser.add_argument(
+        "--emit-font",
+        type=str,
+        default=None,
+        help="Emit an installable font (TTF/WOFF) in compositing-only mode. Example: --emit-font out.ttf"
+    )
+    parser.add_argument(
+        "--charset",
+        type=str,
+        default="ascii",
+        choices=["ascii", "latin1", "input"],
+        help="Which codepoints to emit when using --emit-font."
+    )
+    parser.add_argument(
+        "--width-mode",
+        type=str,
+        default="max",
+        choices=["font1", "max", "auto"],
+        help="How to choose advance widths in emitted font."
+    )
+    parser.add_argument(
+        "--family-name",
+        type=str,
+        default=None,
+        help="Optional family name for the emitted font (name table)."
+    )
+    
     args = parser.parse_args()
 
     INPUT_WORD = args.word1
     INPUT_WORD2 = args.word2
-    FONT1_FILE_PATH = args.font
-    FONT2_FILE_PATH = args.font2
+
+    try:
+        FONT1_FILE_PATH = resolve_font_path(args.font)
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}")
+        exit(1)
+    
+    if args.font2:
+        try:
+            FONT2_FILE_PATH = resolve_font_path(args.font2)
+        except FileNotFoundError as e:
+            print(f"ERROR: {e}")
+            exit(1)
+    else:
+        FONT2_FILE_PATH = None
+    
     print(f'DEBUG: FONT1_FILE_PATH {FONT1_FILE_PATH}')
     print(f'DEBUG: FONT2_FILE_PATH {FONT2_FILE_PATH}')
     TARGET_WIDTH = args.width
@@ -945,6 +1524,42 @@ if __name__ == "__main__":
         print(f"DEBUG: {font2['head']}")
     except Exception as e:
         print(f"WARNING: Could not load font2. Falling back to font1. Details: {e}")
+
+    if args.emit_font:
+        # Force compositing behavior
+        supported_emit_strategies = {"outline"}  # expand later
+        if args.strategy not in supported_emit_strategies:
+            print("ERROR: --emit-font currently supports only --strategy outline.")
+            print("       (Other strategies are not yet wired/robust for font emission.)")
+            exit(1)
+
+        # Build charset
+        if args.charset == "ascii":
+            cps = list(range(0x20, 0x7F))
+        elif args.charset == "latin1":
+            cps = list(range(0x20, 0x100))
+        elif args.charset == "input":
+            s = INPUT_WORD
+            cps = sorted(set(ord(ch) for ch in s))
+        else:
+            cps = list(range(0x20, 0x7F))
+
+        if args.charset == "input" and INPUT_WORD == "":
+            print("ERROR: --charset input requires a non-empty word to define the glyph subset.")
+            exit(1)
+
+        emit_composite_font(
+            out_path=args.emit_font,
+            font1=font1,
+            font2=font2,
+            charset_codepoints=cps,
+            strategy_func=STRATEGY_TO_USE,
+            alignment_func=ALIGNMENT_TO_USE,
+            uniform_glyphs=UNIFORM_GLYPHS,
+            width_mode=args.width_mode,
+            family_name=args.family_name,
+        )
+        exit(0)
 
     winning_glyphs = {}
 
