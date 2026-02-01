@@ -9,7 +9,7 @@ Straight (non-ambigram) font compositor usage is now a first-class citizen with 
 
 ## Font compositing mode (no ambigram rotation)
 
-If your goal is NOT an ambigram, but "take glyph A from font1 and glyph B from font2 and merge them into a single composite shape", use `--noambi`.
+If your goal is NOT an ambigram, but "take glyph A from font1 and glyph A from font2 and merge them into a single composite shape", use `--noambi`.
 
 In `--noambi` mode, `fambigen` does three things:
 
@@ -267,6 +267,7 @@ The script operates in two main stages:
 ## License
 
 This project is licensed under the MIT License
+
 
 
 
