@@ -81,18 +81,6 @@ you explicitly pass `--charset input`.
 - `--uniform-glyphs` : normalize source glyph height before merging (useful when mixing fonts with different metrics).
 - `--width` : final output PNG width in pixels.
 
-### Examples
-
-#### 1) Self-composite: make a single font "heavier / weirder" by merging each glyph with itself
-
-```bash
-python fambigen.py "GOLGOTHIKA" \
-  --noambi \
-  --strategy outline \
-  --alignment centroid \
-  --font "/path/to/fontA.ttf"
-```
-
 ## About fambigen
 This script takes one or two input words (or phrases), generates the necessary rotationally symmetric glyphs for each character pair, and composes them into a single PNG image.
 
@@ -267,6 +255,7 @@ The script operates in two main stages:
 ## License
 
 This project is licensed under the MIT License
+
 
 
 
