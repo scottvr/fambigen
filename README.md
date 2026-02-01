@@ -43,7 +43,7 @@ And the example after installing it via MacOS Font Book:
 
 Enables font output. Implies `--noambi`.
 
-Refuses if `--strategy` is not compatible with font emission (I'd start with outline only).
+Refuses if `--strategy` is not compatible with font emission (currently only `outline` strategy is used).
 
 - `--charset {input,ascii,latin1,custom}`
 
@@ -61,7 +61,7 @@ font1: advance width from font1
 
 max: max(font1,font2)
 
-auto: compute from composite bounds + padding (display-font-y, but sometimes nicest)
+auto: compute from composite bounds + padding (display-font-y, but the results have been surprisingly satisfactory, especially in light of not addressing proper kerning, etc.)
 
 - `--name "Family Name"` (optional) and auto-generate style name
 
@@ -100,7 +100,7 @@ I had cobbled together something similar in perl using a static ambigram font th
 
 I searched a bit online and was surprised to find that this seemed mostly true, aside from a couple of recent diffusion model projects and even those required what to me seemed an excess of human intervention. Seemed the choice was a human, or an ambigram in one of the two fonts every one of those website copies from one another. I had an idea, and it was surprisingly successful. ~~Maybe I'll write a paper explaining my method. :-)~~
 
-[I've writtten a paper about this method](https://paperclipmaximizer.ai/fambigen.pdf)
+[I've writtten a short paper about this method](https://paperclipmaximizer.ai/fambigen.pdf)
 
 ## Examples
 
@@ -172,7 +172,7 @@ python fambigen.py word1 [word2] [--font FONT_PATH] [--strategy STRATEGY_NAME]
 
 * `word1`: (Required) The first word, which is read from left to right.
 * `word2`: (Optional) The second word, which is read when the image is rotated 180 degrees. If omitted, the script will create a palindromic ambigram of `word1`.
-* `-f, --font`: (Optional) The full path to the `.ttf` font file you wish to use. Defaults to Arial.
+* `-f, --font`: (Optional) The full path to the `.ttf` font file you wish to use. Defaults to Arial. Note that I'm now using matplotlib's system font path searching, but absolute paths to individual font files is also supported.
 * `-f2, --font2`: (Optional) The full path to a second `.ttf` font file you wish to use. Defaults to `font`. (You can specify just `font2` if you like and `font` will remain its default of arial unless otherwise specified.)
 * `-s, --strategy`: (Optional) The generation strategy to use. Choices are `centroid`, `principal_axis`, `outline`, and `centerline_trace`. Defaults to `outline`.
 * `--alignment`: (Optional) The glyph alignment strategy to use. Choices are `centroid` and `iterative_registration (shape_overlap maximization). (`-a c`, or `-a i` for short)
@@ -266,7 +266,8 @@ The script operates in two main stages:
 
 ## License
 
-This project is licensed under the MIT Licenset push
+This project is licensed under the MIT License
+
 
 
 
