@@ -4,7 +4,7 @@
 
 A command-line tool originally created to procedurally generate ambigrams from character pairs sourced from any TTF or WOFF font, and compose them into words or phrases. (An ambigram is a word or design that can be read from more than one viewpoint, such as when flipped upside-down (180-degree rotational symmetry).
 
-Amidst the feature development process, the ability to use two different source fonts when creating ambigram images was added. Some time after this, tha ability to create wholly new (non-ambigram) fonts, using boolean opeartors (Union, Intersection, XOR) to create a new font - often not resembling either of the input source font paths or strokes, creating entirely new outlines by transforming the vector paths from the sources via these logical operations. 
+Amidst the feature development process, the ability to use two different source fonts when creating ambigram images was added. Some time after this, tha ability to create wholly new (non-ambigram) fonts, using boolean opeartors (Union, Intersection, XOR) to create a new font - often not resembling either of the input source font paths or strokes, creating entirely new outlines by transforming the vector paths from the sources via these logical operations was added. 
 
 I had been referring to this new "font mashup" capability as a "copmpositor" or "merger", but have since learned that amongst the font community, these terms have well-understood definitions other than what fambigen does. Perhaps less ambiguous might be "Algorithmic Type Synthesizer", "Boolean Glyph Processor", "Font Hybrid Outline Generator" (this appeals to me because I could call it "Font HOG"), or "non-linear typeface interpolator". I think this wording might also have an effect that might reduce some of the initial reaction from the typography community that seemed to look asconce, insinuating that this tool was somehow encouraging "piracy". In my view, it's a creative tool that makes use of ombinatorial synthesis of path geometry, modulating paths of one font wioth "signal" from another.
 
@@ -76,14 +76,6 @@ you explicitly pass `--charset input`.
 `--charset input` will emit a subset font containing only the glyphs that appear in word1
 
 `--charset ascii` or `--charset  latin1` will emit a general-purpose font; word1 is just a placeholder
-
-### The rest of the switches
-
-- `--noambi` : do NOT rotate the second glyph 180 degrees; just merge outlines directly.
-- `--font2`  : optionally use a second font for the second glyph in each pair (defaults to font1).
-- `--alignment` : how to align the two outlines before merging (outline strategy only).
-- `--uniform-glyphs` : normalize source glyph height before merging (useful when mixing fonts with different metrics).
-- `--width` : final output PNG width in pixels.
 
 ## About fambigen
 This script takes one or two input words (or phrases), generates the necessary rotationally symmetric glyphs for each character pair, and composes them into a single PNG image.
@@ -169,6 +161,7 @@ python fambigen.py word1 [word2] [--font FONT_PATH] [--strategy STRATEGY_NAME]
 * `-s, --strategy`: (Optional) The generation strategy to use. Choices are `centroid`, `principal_axis`, `outline`, and `centerline_trace`. Defaults to `outline`.
 * `--alignment`: (Optional) The glyph alignment strategy to use. Choices are `centroid` and `iterative_registration (shape_overlap maximization). (`-a c`, or `-a i` for short)
 * `--uniform-glyphs`: (Optional) Scale fonts to the same size before merging them.
+- `--width` : final output PNG width in pixels (for ambigram mode).
 * `--noambi` : (Optional) Disables ambigrammitization, allowing for font compositing only.
 * `--emit-font` : (Optional) The output file name for a composited font. Requires both font and font2 arguments define. Note that --emit-font currently supports --strategy outline (with --alignment ...). Other strategies remain available for SVG/PNG workflows.
 
@@ -178,7 +171,7 @@ python fambigen.py word1 [word2] [--font FONT_PATH] [--strategy STRATEGY_NAME]
 ```bash
 python fambigen.py awesome
 ```
-* This will generate a `awesome_ambigram.png` file.
+* This will generate a `awesome_ambigram.png` file (using the default (Arial) font).
 
 **2. Create an ambigram from two different words:**
 ```bash
@@ -191,7 +184,7 @@ python fambigen.py Mary LOVE
 python fambigen.py ambigram --font "/path/to/your/font/coolfont.ttf" --strategy centerline_trace
 ```
 
-**4. Generate a new composite TTFs**
+**4. Generate a new composite TTF**
 
 All examples use Arial and Times New Roman because they are present on most systems and clearly demonstrate serif/sans compositing.
 
