@@ -8,7 +8,7 @@ Amidst the feature development process, the ability to use two different source 
 
 I had been referring to this new "font mashup" capability as a "copmpositor" or "merger", but have since learned that amongst the font community, these terms have well-understood definitions other than what fambigen does. Perhaps less ambiguous might be "Algorithmic Type Synthesizer", "Boolean Glyph Processor", "Font Hybrid Outline Generator" (this appeals to me because I could call it "Font HOG"), or "non-linear typeface interpolator". I think this wording might also have an effect that might reduce some of the initial reaction from the typography community that seemed to look asconce, insinuating that this tool was somehow encouraging "piracy". In my view, it's a creative tool that makes use of ombinatorial synthesis of path geometry, modulating paths of one font wioth "signal" from another.
 
-The latest feature addition enables the output of an entirely new TTF/WOFF using this same process, in addition to retining its original functionality of (optionally) outputting a single PNG of a single word made of these "mashups" of individual glyphs, in either an ambigram or as just newly formed letter shapes that read only right-side up. 
+The latest feature addition enables the output of an entirely new TTF/WOFF using this same process, in addition to retaining its original functionality of (optionally) outputting a single PNG of a single word made of these "mashups" of individual glyphs, in either an ambigram or as just newly formed letter shapes that read only right-side up. 
 
 I have not yet updated all uses of the term "compositor" in the documentation below; don't let that confuse you. 
 
