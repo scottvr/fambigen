@@ -1791,7 +1791,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-f", "--font", 
         type=str, 
-        default="C:\\Windows\\Fonts\\arial.ttf",
+        default="Arial",
         help="Path to the TTF font file to use.\nDefaults to Arial on Windows."
     )
     parser.add_argument(
