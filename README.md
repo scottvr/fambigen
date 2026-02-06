@@ -2,14 +2,19 @@
 
 ![Python](https://img.shields.io/badge/python-3.x-blue.svg)
 
-A command-line tool written in Python to procedurally generate ambigrams from character pairs sourced from any TTF or WOFF font, and compose them into words or phrases. An ambigram is a word or design that can be read from more than one viewpoint, such as when flipped upside-down (180-degree rotational symmetry).
+A command-line tool originally created to procedurally generate ambigrams from character pairs sourced from any TTF or WOFF font, and compose them into words or phrases. (An ambigram is a word or design that can be read from more than one viewpoint, such as when flipped upside-down (180-degree rotational symmetry).
 
-**NEW**
-Straight (non-ambigram) font compositor usage is now a first-class citizen with composited font file (suitable for system installation) capabilities! See `--emit-font` usage in the documentation below.
+Amidst the feature development process, the ability to use two different source fonts when creating ambigram images was added. Some time after this, tha ability to create wholly new (non-ambigram) fonts, using boolean opeartors (Union, Intersection, XOR) to create a new font - often not resembling either of the input source font paths or strokes, creating entirely new outlines by transforming the vector paths from the sources via these logical operations. 
 
-## Font compositing mode (no ambigram rotation)
+I had been referring to this new "font mashup" capability as a "copmpositor" or "merger", but have since learned that amongst the font community, these terms have well-understood definitions other than what fambigen does. Perhaps less ambiguous might be "Algorithmic Type Synthesizer", "Boolean Glyph Processor", "Font Hybrid Outline Generator" (this appeals to me because I could call it "Font HOG"), or "non-linear typeface interpolator". I think this wording might also have an effect that might reduce some of the initial reaction from the typography community that seemed to look asconce, insinuating that this tool was somehow encouraging "piracy". In my view, it's a creative tool that makes use of ombinatorial synthesis of path geometry, modulating paths of one font wioth "signal" from another.
 
-If your goal is NOT an ambigram, but "take glyph A from font1 and glyph A from font2 and merge them into a single composite shape", use `--noambi`.
+The latest feature addition enables the output of an entirely new TTF/WOFF using this same process, in addition to retining its original functionality of (optionally) outputting a single PNG of a single word made of these "mashups" of individual glyphs, in either an ambigram or as just newly formed letter shapes that read only right-side up. 
+
+I have not yet updated all uses of the term "compositor" in the documentation below; don't let that confuse you. 
+
+## Font "mashing" mode (no ambigram rotation)
+
+If your goal is NOT an ambigram, but "take glyphs from font1 and glyphs from font2 and merge them into a single composite shape", use `--noambi`.
 
 In `--noambi` mode, `fambigen` does three things:
 
@@ -20,7 +25,7 @@ In `--noambi` mode, `fambigen` does three things:
 This is best thought of as a *procedural compositor / renderer*, ~~not a tool that emits an installable `.ttf/.otf`~~.
 
 ## (It now totally does output installable font files
-given two source fonts as input arguments.) Keep reading for usage details. 
+given two source fonts as input arguments.) Keep reading for usage details on `--emit-font` mode. 
 In the meantime, here's an example of the first successfully generated font, installed and in use on a MacBook Air:
 
 ```bash
@@ -36,7 +41,6 @@ And the example after installing it via MacOS Font Book:
 ![Arial + Times New Roman](https://github.com/scottvr/fambigen/blob/c0f2f13f71de0d930c4b2570f022409f4fbf854d/assets/AriTimes1..2..3.png)
 
 
- 
 ### New switches (related to generating FONT files, not Ambigram Images, though of course the tool still makes Ambigram PNGs as originally.)
 
 - `--emit-font OUT.ttf|OUT.woff|OUT.woff2`
